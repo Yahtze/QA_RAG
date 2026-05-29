@@ -1,8 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
-import { askQuestion } from '@/services/chatService'
+import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createConversation as createConv, askQuestion as askQ } from '@/services/chatService'
 import type { Citation, Message } from '@/types'
 import { useDocumentPipeline } from './DocumentPipelineContext'
-import { useSimulationProfile } from './SimulationProfileContext'
 
 interface ConversationValue {
   messages: Message[]
@@ -16,7 +15,6 @@ const ConversationContext = createContext<ConversationValue | null>(null)
 
 export function ConversationProvider({ children }: { children: ReactNode }) {
   const { activeDocument } = useDocumentPipeline()
-  const simulation = useSimulationProfile()
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'assistant-welcome',
@@ -28,6 +26,18 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   ])
   const [latestCitations, setLatestCitations] = useState<Citation[]>([])
   const [isSending, setIsSending] = useState(false)
+  const conversationIdRef = useRef<string | null>(null)
+  const documentIdRef = useRef<string | null>(null)
+
+  async function ensureConversation(documentId: string): Promise<string> {
+    if (conversationIdRef.current && documentIdRef.current === documentId) {
+      return conversationIdRef.current
+    }
+    const id = await createConv(documentId)
+    conversationIdRef.current = id
+    documentIdRef.current = documentId
+    return id
+  }
 
   async function send(query: string) {
     if (!activeDocument || !query.trim()) return
@@ -41,7 +51,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     ])
 
     try {
-      const response = await askQuestion(activeDocument, originalQuery, simulation.consumeChatFailure())
+      const conversationId = await ensureConversation(activeDocument.id)
+      const response = await askQ(conversationId, activeDocument, originalQuery)
       setLatestCitations(response.citations)
       setMessages((current) => current.map((message) => message.id === loadingId ? {
         ...message,

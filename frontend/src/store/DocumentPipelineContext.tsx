@@ -35,7 +35,8 @@ export function DocumentPipelineProvider({ children }: { children: ReactNode }) 
     if (doc.status === 'ready') setActiveDocumentId(doc.id)
   }
 
-  async function retry(_documentId: string) {
+  async function retry(documentId: string) {
+    void documentId
     // no-op: kept for API compatibility
   }
 

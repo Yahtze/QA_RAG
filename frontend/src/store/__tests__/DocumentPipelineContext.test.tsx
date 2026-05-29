@@ -56,7 +56,7 @@ describe('DocumentPipelineContext', () => {
     })
 
     expect(result.current.documents).toHaveLength(2)
-    expect(result.current.documents[0].name).toBe('new.pdf')
+    expect(result.current.documents[0]!.name).toBe('new.pdf')
   })
 
   it('selects uploaded ready document', async () => {

@@ -60,7 +60,7 @@ describe('documentService', () => {
 
     const docs = await listDocuments()
     expect(docs).toHaveLength(1)
-    expect(docs[0].name).toBe('report.pdf')
+    expect(docs[0]!.name).toBe('report.pdf')
   })
 
   it('deletes document and returns void', async () => {
