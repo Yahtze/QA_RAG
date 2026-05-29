@@ -17,7 +17,7 @@ class DocumentIngestionRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create_pending(
+    async def create_pending_without_commit(
         self, *, user: User, filename: str, content_type: str, size_bytes: int, storage_path: str
     ) -> Document:
         doc = Document(
@@ -29,7 +29,24 @@ class DocumentIngestionRepository:
             status=DocumentStatus.PENDING.value,
         )
         self.session.add(doc)
+        await self.session.flush()
+        await self.session.refresh(doc)
+        return doc
+
+    async def commit(self) -> None:
         await self.session.commit()
+
+    async def create_pending(
+        self, *, user: User, filename: str, content_type: str, size_bytes: int, storage_path: str
+    ) -> Document:
+        doc = await self.create_pending_without_commit(
+            user=user,
+            filename=filename,
+            content_type=content_type,
+            size_bytes=size_bytes,
+            storage_path=storage_path,
+        )
+        await self.commit()
         await self.session.refresh(doc)
         return doc
 
