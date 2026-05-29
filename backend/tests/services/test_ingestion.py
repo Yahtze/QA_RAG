@@ -1,9 +1,10 @@
 import pytest
 
 from app.models.user import User
+from app.services.document_ingestion_repository import DocumentIngestionRepository
 from app.services.embeddings import FakeEmbeddingProvider
 from app.services.ingestion import TEXT_ZERO_CHUNKS_ERROR, IngestionService
-from app.services.ingestion_errors import DeterministicIngestionError
+from app.services.ingestion_errors import DeterministicIngestionError, RetryableIngestionError
 from app.services.vector_store import VectorStore
 
 
@@ -63,3 +64,70 @@ async def test_zero_chunk_text_retained_as_failed(db_session, settings):
     out = await service.ingest_upload(user=user, upload_file=Upload())
     assert out.status.value == "failed"
     assert out.error_message == TEXT_ZERO_CHUNKS_ERROR
+
+
+class FailingEmbeddingProvider:
+    def __init__(self, exc):
+        self.exc = exc
+
+    async def embed_texts(self, texts):
+        raise self.exc
+
+
+@pytest.mark.asyncio
+async def test_retryable_error_leaves_document_processing(db_session, settings):
+    user = User(email="retryable@example.com", hashed_password="x")
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    repo = DocumentIngestionRepository(db_session)
+    doc = await repo.create_pending(
+        user=user,
+        filename="doc.txt",
+        content_type="text/plain",
+        size_bytes=5,
+        storage_path="uploads/x.txt",
+    )
+    service = IngestionService(
+        session=db_session,
+        settings=settings,
+        storage=FakeStorage(data=b"hello world"),
+        embedding_provider=FailingEmbeddingProvider(RetryableIngestionError("embedding", RuntimeError("rate"))),
+        vector_store=RecordingVectorStore(),
+    )
+
+    with pytest.raises(RetryableIngestionError):
+        await service.ingest_document(doc.id)
+
+    refreshed = await repo.get_document(doc.id)
+    assert refreshed.status == "processing"
+
+
+@pytest.mark.asyncio
+async def test_deterministic_error_marks_failed(db_session, settings):
+    user = User(email="deterministic@example.com", hashed_password="x")
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    repo = DocumentIngestionRepository(db_session)
+    doc = await repo.create_pending(
+        user=user,
+        filename="doc.txt",
+        content_type="text/plain",
+        size_bytes=5,
+        storage_path="uploads/x.txt",
+    )
+    service = IngestionService(
+        session=db_session,
+        settings=settings,
+        storage=FakeStorage(data=b"hello world"),
+        embedding_provider=FailingEmbeddingProvider(DeterministicIngestionError("bad", "embedding")),
+        vector_store=RecordingVectorStore(),
+    )
+
+    with pytest.raises(DeterministicIngestionError):
+        await service.ingest_document(doc.id)
+
+    refreshed = await repo.get_document(doc.id)
+    assert refreshed.status == "failed"
+    assert refreshed.error_message == "bad"
