@@ -7,9 +7,11 @@ from app.api.deps import get_current_user, get_settings_dep
 from app.core.pagination import CursorPage
 from app.db.session import get_db_session
 from app.schemas.document import DeletedDocumentOut, DocumentOut
+from app.services.async_document_upload import AsyncDocumentUpload, ENQUEUE_FAILURE_MESSAGE
 from app.services.document_pipeline import DocumentPipelineService, ForbiddenError, NotFoundError
 from app.services.embeddings import OpenAIEmbeddingProvider
 from app.services.ingestion import IngestionService
+from app.services.ingestion_queue import CeleryIngestionQueue, EnqueueIngestionError
 from app.services.storage import (
     DisallowedContentTypeError,
     InvalidPdfError,
@@ -28,22 +30,30 @@ async def upload(
     session: AsyncSession = Depends(get_db_session),
     settings=Depends(get_settings_dep),
 ):
-    storage = LocalStorageService(settings)
-    vector_store = QdrantVectorStore(settings)
-    service = DocumentPipelineService(
-        session,
-        storage,
-        ingestion_service=IngestionService(
-            session=session,
-            settings=settings,
-            storage=storage,
-            embedding_provider=OpenAIEmbeddingProvider(settings),
-            vector_store=vector_store,
-        ),
-        vector_store=vector_store,
-    )
     try:
+        if settings.USE_ASYNC_INGESTION:
+            return await AsyncDocumentUpload(
+                session=session,
+                settings=settings,
+                queue=CeleryIngestionQueue(settings=settings),
+            ).upload(user=user, upload_file=file)
+        storage = LocalStorageService(settings)
+        vector_store = QdrantVectorStore(settings)
+        service = DocumentPipelineService(
+            session,
+            storage,
+            ingestion_service=IngestionService(
+                session=session,
+                settings=settings,
+                storage=storage,
+                embedding_provider=OpenAIEmbeddingProvider(settings),
+                vector_store=vector_store,
+            ),
+            vector_store=vector_store,
+        )
         return await service.upload(user=user, upload_file=file)
+    except EnqueueIngestionError:
+        raise HTTPException(status_code=500, detail=ENQUEUE_FAILURE_MESSAGE)
     except UploadTooLargeError:
         raise HTTPException(status_code=413, detail="Upload too large")
     except (DisallowedContentTypeError, InvalidPdfError):
