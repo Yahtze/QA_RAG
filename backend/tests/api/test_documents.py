@@ -82,3 +82,14 @@ async def test_upload_route_maps_enqueue_failure_to_500(async_client, auth_heade
 
     assert r.status_code == 500
     assert r.json()["detail"] == "Failed to enqueue ingestion task."
+
+
+def test_upload_route_does_not_import_worker_or_celery():
+    import inspect
+    import app.api.v1.documents as documents
+
+    source = inspect.getsource(documents.upload)
+    assert "send_task" not in source
+    # CeleryIngestionQueue is the abstraction layer; ensure no direct celery imports
+    assert "from celery" not in source.lower()
+    assert "celery_app" not in source
