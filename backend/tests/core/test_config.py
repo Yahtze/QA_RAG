@@ -44,3 +44,13 @@ def test_ingestion_settings_validate_ranges(overrides):
 
 def test_embedding_base_url_empty_string_becomes_none():
     assert _settings(EMBEDDING_BASE_URL="").EMBEDDING_BASE_URL is None
+
+
+def test_async_ingestion_and_celery_defaults():
+    settings = _settings()
+    assert settings.USE_ASYNC_INGESTION is True
+    assert settings.CELERY_BROKER_URL == settings.REDIS_URL
+    assert settings.CELERY_RESULT_BACKEND == settings.REDIS_URL
+    assert settings.CELERY_TASK_IGNORE_RESULT is True
+    assert settings.CELERY_WORKER_CONCURRENCY == 1
+    assert settings.CELERY_MAX_TASKS_PER_CHILD == 50
