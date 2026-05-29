@@ -9,8 +9,7 @@ from app.db.session import get_db_session
 from app.schemas.document import DeletedDocumentOut, DocumentOut
 from app.services.async_document_upload import AsyncDocumentUpload, ENQUEUE_FAILURE_MESSAGE
 from app.services.document_pipeline import DocumentPipelineService, ForbiddenError, NotFoundError
-from app.services.embeddings import OpenAIEmbeddingProvider
-from app.services.ingestion import IngestionService
+from app.services.ingestion_factory import build_ingestion_service
 from app.services.ingestion_queue import CeleryIngestionQueue, EnqueueIngestionError
 from app.services.storage import (
     DisallowedContentTypeError,
@@ -38,18 +37,11 @@ async def upload(
                 queue=CeleryIngestionQueue(settings=settings),
             ).upload(user=user, upload_file=file)
         storage = LocalStorageService(settings)
-        vector_store = QdrantVectorStore(settings)
         service = DocumentPipelineService(
             session,
             storage,
-            ingestion_service=IngestionService(
-                session=session,
-                settings=settings,
-                storage=storage,
-                embedding_provider=OpenAIEmbeddingProvider(settings),
-                vector_store=vector_store,
-            ),
-            vector_store=vector_store,
+            ingestion_service=build_ingestion_service(session=session, settings=settings),
+            vector_store=QdrantVectorStore(settings),
         )
         return await service.upload(user=user, upload_file=file)
     except EnqueueIngestionError:
