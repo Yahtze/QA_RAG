@@ -26,6 +26,8 @@ export interface Citation {
   documentName: string
   page: number
   snippet: string
+  label?: string
+  chunkId?: string
 }
 
 export interface ChatError {
@@ -48,6 +50,27 @@ export interface ChatResponse {
   answer: string
   citations: Citation[]
 }
+
+export interface ConversationSummary {
+  id: string
+  activeDocumentIds: string[]
+  needsRetry: boolean
+  danglingUserMessageId?: string | null
+}
+
+export interface CitationSource {
+  chunkId: string
+  docId: string
+  filename: string
+  page: number | null
+  snippet: string
+}
+
+export type ConversationStreamEvent =
+  | { type: 'token'; value: string; reason?: string }
+  | { type: 'citations'; map: Record<string, CitationSource> }
+  | { type: 'error'; message: string; retryable: boolean }
+  | { type: 'done' }
 
 export interface SimulationSettings {
   failNextChat: boolean

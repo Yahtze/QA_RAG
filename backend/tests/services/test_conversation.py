@@ -2,6 +2,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models import Conversation, Document, DocumentStatus, User
+from app.services.answer_pipeline import AnswerEvent
 from app.services.conversation import ConversationService
 
 
@@ -24,12 +25,36 @@ async def test_create_send_messages(db_session):
     await db_session.commit()
     await db_session.refresh(doc)
 
-    svc = ConversationService(db_session)
+    class FakePipeline:
+        def __init__(self, session):
+            self.session = session
+
+        async def answer(self, **kwargs):
+            from app.models import Message, MessageRole
+
+            self.session.add_all([
+                Message(
+                    conversation_id=kwargs["conversation_id"],
+                    role=MessageRole.USER.value,
+                    content=kwargs["content"],
+                ),
+                Message(
+                    conversation_id=kwargs["conversation_id"],
+                    role=MessageRole.ASSISTANT.value,
+                    content="hi",
+                ),
+            ])
+            await self.session.commit()
+            yield AnswerEvent(type="token", value="hi")
+            yield AnswerEvent(type="citations", map={})
+            yield AnswerEvent(type="done")
+
+    svc = ConversationService(db_session, answer_pipeline=FakePipeline(db_session))
+
     conv = await svc.create(user=user, document_id=doc.id)
     assert conv.active_document_ids == [doc.id]
     pair = await svc.send_message(user=user, conversation_id=conv.id, content="hi")
-    assert pair.assistant_message.content == "This is a placeholder answer generated before RAG ingestion is implemented."
-    assert pair.assistant_message.citations[0].chunk_text == "Stub citation text for frontend wiring."
+    assert pair.assistant_message.content == "hi"
 
     history = await svc.messages(user=user, conversation_id=conv.id, cursor=None, limit=20)
     assert len(history.items) == 2

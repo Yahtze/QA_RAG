@@ -9,7 +9,6 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import sqlite
 
 revision: str = "003_answer_pipeline"
 down_revision: str | None = "002_ingestion_pipeline"

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createConversation, askQuestion } from '../chatService'
+import { createConversation, askQuestion, updateActiveDocuments } from '../chatService'
 import type { RagDocument } from '@/types'
 
 const baseDoc: RagDocument = {
@@ -19,7 +19,14 @@ describe('chatService', () => {
   it('creates conversation and returns id', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
-        JSON.stringify({ id: 'conv-1', document_id: 'doc-1', created_at: '2026-05-29T00:00:00Z' }),
+        JSON.stringify({
+          id: 'conv-1',
+          document_id: 'doc-1',
+          active_document_ids: ['doc-1'],
+          needs_retry: false,
+          dangling_user_message_id: null,
+          created_at: '2026-05-29T00:00:00Z',
+        }),
         { status: 200 },
       ),
     )
@@ -57,6 +64,30 @@ describe('chatService', () => {
       documentName: 'report.pdf',
       page: 3,
       snippet: 'X is important.',
+    })
+  })
+
+  it('updates active documents', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 'conv-1',
+          document_id: 'doc-1',
+          active_document_ids: ['doc-1', 'doc-2'],
+          needs_retry: true,
+          dangling_user_message_id: 'm-1',
+          created_at: '2026-05-29T00:00:00Z',
+        }),
+        { status: 200 },
+      ),
+    )
+
+    const result = await updateActiveDocuments('conv-1', ['doc-1', 'doc-2'])
+    expect(result).toEqual({
+      id: 'conv-1',
+      activeDocumentIds: ['doc-1', 'doc-2'],
+      needsRetry: true,
+      danglingUserMessageId: 'm-1',
     })
   })
 

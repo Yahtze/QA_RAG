@@ -36,7 +36,15 @@ def test_retrieval_defaults_are_valid():
     assert settings.CONTEXT_MAX_CHARS == 12_000
 
 
-@pytest.mark.parametrize("field", ["RETRIEVAL_BM25_TOP_K", "RETRIEVAL_SEMANTIC_TOP_K", "RETRIEVAL_FINAL_TOP_K", "CONTEXT_MAX_CHARS"])
+@pytest.mark.parametrize(
+    "field",
+    [
+        "RETRIEVAL_BM25_TOP_K",
+        "RETRIEVAL_SEMANTIC_TOP_K",
+        "RETRIEVAL_FINAL_TOP_K",
+        "CONTEXT_MAX_CHARS",
+    ],
+)
 def test_retrieval_positive_values(field: str):
     kwargs = settings_kwargs()
     kwargs[field] = 0
