@@ -17,7 +17,16 @@ dependencies = [
   "python-multipart>=0.0.12",
   "qdrant-client>=1.12.0",
   "redis>=5.1.0",
+  "celery[redis]>=5.4.0",
   "sqlalchemy[asyncio]>=2.0.36",
+  # Explicitly excluded from first pass:
+  # tiktoken      — char-based chunking is tokenizer-independent by design
+  # pytesseract   — OCR deferred; failed docs retained for future retry
+  # pdfplumber    — table extraction deferred; pymupdf sufficient for text PDFs
+  # boto3/s3      — storage abstraction deferred; local/simple store for now
+  "pymupdf>=1.24.0",
+  "openai>=1.0.0",
+  "tenacity>=8.2.0",
 ]
 
 [project.optional-dependencies]

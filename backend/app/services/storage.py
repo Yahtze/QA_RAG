@@ -26,6 +26,8 @@ class StoredFile:
 
 
 class LocalStorageService:
+    # Stored originals retained when ingestion fails.
+    # Delete only on document delete or explicit cleanup.
     def __init__(self, settings: Settings):
         self.settings = settings
 
@@ -86,6 +88,9 @@ class LocalStorageService:
             full.unlink(missing_ok=True)
             raise
         return StoredFile(storage_path=str(rel), content_type=ctype, size_bytes=size)
+
+    async def read_bytes(self, storage_path: str) -> bytes:
+        return (self.settings.storage_root_path / storage_path).read_bytes()
 
     async def delete(self, storage_path: str) -> None:
         (self.settings.storage_root_path / storage_path).unlink(missing_ok=True)

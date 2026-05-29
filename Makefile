@@ -1,4 +1,4 @@
-.PHONY: dev build docker-up docker-down docker-logs lint clean backend-install backend-dev backend-test backend-lint backend-format backend-migrate backend-revision
+.PHONY: dev build docker-up docker-down docker-logs lint clean backend-install backend-dev backend-test backend-lint backend-format backend-migrate backend-revision backend-worker
 
 dev:
 	cd frontend && npm run dev
@@ -41,3 +41,12 @@ backend-migrate:
 
 backend-revision:
 	cd backend && ../.venv/bin/python -m alembic revision --autogenerate -m "$(name)"
+
+backend-reconcile-ingestion:
+	cd backend && ../.venv/bin/python -m app.cli.reconcile_ingestion
+
+backend-reconcile-ingestion-apply:
+	cd backend && ../.venv/bin/python -m app.cli.reconcile_ingestion --no-dry-run
+
+backend-worker:
+	.venv/bin/celery -A app.worker.celery_app worker -Q ingestion --loglevel=info --concurrency=$${CELERY_WORKER_CONCURRENCY:-1} --max-tasks-per-child=$${CELERY_MAX_TASKS_PER_CHILD:-50}

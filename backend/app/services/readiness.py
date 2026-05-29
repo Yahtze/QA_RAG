@@ -23,6 +23,9 @@ class ReadinessService:
     async def check(self) -> ReadinessReport:
         async with self.engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-        await ping_redis(self.settings)
+        redis = "skipped"
+        if self.settings.USE_ASYNC_INGESTION:
+            await ping_redis(self.settings)
+            redis = "ok"
         await QdrantCollectionService(self.settings).ensure_collection()
-        return ReadinessReport(postgres="ok", redis="ok", qdrant="ok")
+        return ReadinessReport(postgres="ok", redis=redis, qdrant="ok")

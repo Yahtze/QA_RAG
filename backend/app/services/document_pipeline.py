@@ -1,4 +1,4 @@
-import uuid
+import logging
 
 from fastapi import UploadFile
 from sqlalchemy import select
@@ -10,9 +10,10 @@ from app.core.pagination import (
     normalize_limit,
     page_from_items,
 )
-from app.models import Document, DocumentStatus, User
-from app.schemas.document import DocumentOut
-from app.services.storage import LocalStorageService
+from app.models import Document, User
+from app.schemas.document import DeletedDocumentOut, DocumentOut
+
+logger = logging.getLogger(__name__)
 
 
 class NotFoundError(Exception): ...
@@ -22,32 +23,16 @@ class ForbiddenError(Exception): ...
 
 
 class DocumentPipelineService:
-    def __init__(self, session: AsyncSession, storage: LocalStorageService):
+    def __init__(self, session: AsyncSession, storage, ingestion_service=None, vector_store=None):
         self.session = session
         self.storage = storage
+        self.ingestion_service = ingestion_service
+        self.vector_store = vector_store
 
     async def upload(self, *, user: User, upload_file: UploadFile) -> DocumentOut:
-        doc_id = uuid.uuid4()
-        stored = await self.storage.store_upload(
-            user_id=user.id,
-            document_id=doc_id,
-            filename=upload_file.filename or "upload.bin",
-            content_type=upload_file.content_type or "application/octet-stream",
-            upload=upload_file.file,
-        )
-        doc = Document(
-            id=doc_id,
-            user_id=user.id,
-            filename=upload_file.filename or "upload.bin",
-            content_type=stored.content_type,
-            size_bytes=stored.size_bytes,
-            storage_path=stored.storage_path,
-            status=DocumentStatus.READY.value,
-        )
-        self.session.add(doc)
-        await self.session.commit()
-        await self.session.refresh(doc)
-        return DocumentOut.model_validate(doc, from_attributes=True)
+        if self.ingestion_service is None:
+            raise RuntimeError("ingestion_service is required for upload")
+        return await self.ingestion_service.ingest_upload(user=user, upload_file=upload_file)
 
     async def list(self, *, user: User, cursor: str | None, limit: int | None):
         lim = normalize_limit(limit)
@@ -81,7 +66,16 @@ class DocumentPipelineService:
             raise NotFoundError
         if doc.user_id != user.id:
             raise ForbiddenError
+        if self.vector_store is not None:
+            await self.vector_store.delete_document_points(document_id)
         path = doc.storage_path
         await self.session.delete(doc)
         await self.session.commit()
-        await self.storage.delete(path)
+        try:
+            await self.storage.delete(path)
+        except Exception:
+            logger.warning(
+                "document_file_delete_failed",
+                extra={"document_id": str(document_id), "storage_path": path},
+            )
+        return DeletedDocumentOut(id=document_id)
