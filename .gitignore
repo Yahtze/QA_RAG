@@ -8,3 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Documentation and agent files
+docs/
+AGENTS.md
+CONTEXT.md
+.antigravitycli/
