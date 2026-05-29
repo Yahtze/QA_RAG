@@ -78,15 +78,18 @@ class QdrantVectorStore:
         wait=wait_exponential(multiplier=1, min=1, max=8),
         reraise=True,
     )
+    async def _delete_document_points_raw(self, document_id: UUID) -> None:
+        flt = qm.Filter(
+            must=[qm.FieldCondition(key="document_id", match=qm.MatchValue(value=str(document_id)))]
+        )
+        await self.client.delete(
+            collection_name=self.settings.QDRANT_COLLECTION_NAME,
+            points_selector=qm.FilterSelector(filter=flt),
+        )
+
     async def delete_document_points(self, document_id: UUID) -> None:
         try:
-            flt = qm.Filter(
-                must=[qm.FieldCondition(key="document_id", match=qm.MatchValue(value=str(document_id)))]
-            )
-            await self.client.delete(
-                collection_name=self.settings.QDRANT_COLLECTION_NAME,
-                points_selector=qm.FilterSelector(filter=flt),
-            )
+            await self._delete_document_points_raw(document_id)
         except (RetryableIngestionError, DeterministicIngestionError):
             raise
         except (ResponseHandlingException, UnexpectedResponse) as exc:
@@ -98,20 +101,25 @@ class QdrantVectorStore:
         wait=wait_exponential(multiplier=1, min=1, max=8),
         reraise=True,
     )
+    async def _upsert_chunks_raw(
+        self, *, user_id: UUID, chunks: list[DocumentChunkForVector], vectors: list[list[float]]
+    ) -> None:
+        points = [
+            qm.PointStruct(
+                id=str(chunk.id), vector=vector, payload=build_payload(user_id=user_id, chunk=chunk)
+            )
+            for chunk, vector in zip(chunks, vectors, strict=True)
+        ]
+        if points:
+            await self.client.upsert(
+                collection_name=self.settings.QDRANT_COLLECTION_NAME, points=points
+            )
+
     async def upsert_chunks(
         self, *, user_id: UUID, chunks: list[DocumentChunkForVector], vectors: list[list[float]]
     ) -> None:
         try:
-            points = [
-                qm.PointStruct(
-                    id=str(chunk.id), vector=vector, payload=build_payload(user_id=user_id, chunk=chunk)
-                )
-                for chunk, vector in zip(chunks, vectors, strict=True)
-            ]
-            if points:
-                await self.client.upsert(
-                    collection_name=self.settings.QDRANT_COLLECTION_NAME, points=points
-                )
+            await self._upsert_chunks_raw(user_id=user_id, chunks=chunks, vectors=vectors)
         except (RetryableIngestionError, DeterministicIngestionError):
             raise
         except (ResponseHandlingException, UnexpectedResponse) as exc:
