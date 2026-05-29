@@ -10,9 +10,10 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 
 from app.core.config import Settings
 from app.services.chunking import ChunkRecord
-from app.services.ingestion_types import IngestionPhase
 from app.services.qdrant_collection import QdrantCollectionService
-from app.services.ingestion_errors import DeterministicIngestionError, IngestionError, RetryableIngestionError
+from app.services.ingestion_errors import (
+    DeterministicIngestionError, IngestionError, RetryableIngestionError
+)
 
 DocumentChunkForVector = ChunkRecord
 

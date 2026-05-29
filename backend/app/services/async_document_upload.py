@@ -46,7 +46,9 @@ class AsyncDocumentUpload:
             await self.queue.enqueue_document_ingestion(document.id)
             logger.info("api_ingestion_enqueue_succeeded", extra={"document_id": str(document.id)})
         except EnqueueIngestionError:
-            logger.exception("api_ingestion_enqueue_failed", extra={"document_id": str(document.id)})
+            logger.exception(
+                "api_ingestion_enqueue_failed", extra={"document_id": str(document.id)}
+            )
             try:
                 await self.repo.mark_failed(
                     document.id,

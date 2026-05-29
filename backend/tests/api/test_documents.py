@@ -33,7 +33,10 @@ async def test_documents_upload_list_get_delete(async_client, auth_headers, monk
 
     from app.services.ingestion_queue import FakeIngestionQueue
 
-    monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: FakeIngestionQueue())
+    monkeypatch.setattr(
+        "app.api.v1.documents.CeleryIngestionQueue",
+        lambda settings: FakeIngestionQueue(),
+    )
 
     files = {"file": ("doc.txt", b"hello", "text/plain")}
     up = await async_client.post("/api/v1/documents/upload", files=files, headers=auth_headers)

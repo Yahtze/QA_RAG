@@ -2,7 +2,9 @@ from uuid import uuid4
 
 import pytest
 
-from app.services.ingestion_queue import CeleryIngestionQueue, EnqueueIngestionError, FakeIngestionQueue
+from app.services.ingestion_queue import (
+    CeleryIngestionQueue, EnqueueIngestionError, FakeIngestionQueue
+)
 
 
 @pytest.mark.asyncio
@@ -33,9 +35,9 @@ async def test_celery_queue_uses_send_task_and_hides_task_id(settings):
             return object()
 
     document_id = uuid4()
-    result = await CeleryIngestionQueue(settings=settings, celery_app=App()).enqueue_document_ingestion(
-        document_id
-    )
+    result = await CeleryIngestionQueue(
+        settings=settings, celery_app=App()
+    ).enqueue_document_ingestion(document_id)
 
     assert result is None
     assert calls == [("documents.ingest", [str(document_id)], "ingestion")]

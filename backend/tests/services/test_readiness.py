@@ -55,7 +55,6 @@ async def test_readiness_skips_redis_when_async_ingestion_disabled(settings, mon
 
     monkeypatch.setattr("app.services.readiness.QdrantCollectionService", Q)
 
-    from sqlalchemy.ext.asyncio import create_async_engine
 
     class FakeConn:
         async def execute(self, _):

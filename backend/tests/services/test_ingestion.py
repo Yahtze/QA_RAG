@@ -92,7 +92,9 @@ async def test_retryable_error_leaves_document_processing(db_session, settings):
         session=db_session,
         settings=settings,
         storage=FakeStorage(data=b"hello world"),
-        embedding_provider=FailingEmbeddingProvider(RetryableIngestionError("embedding", RuntimeError("rate"))),
+        embedding_provider=FailingEmbeddingProvider(
+            RetryableIngestionError("embedding", RuntimeError("rate"))
+        ),
         vector_store=RecordingVectorStore(),
     )
 
@@ -121,7 +123,9 @@ async def test_deterministic_error_marks_failed(db_session, settings):
         session=db_session,
         settings=settings,
         storage=FakeStorage(data=b"hello world"),
-        embedding_provider=FailingEmbeddingProvider(DeterministicIngestionError("bad", "embedding")),
+        embedding_provider=FailingEmbeddingProvider(
+            DeterministicIngestionError("bad", "embedding")
+        ),
         vector_store=RecordingVectorStore(),
     )
 

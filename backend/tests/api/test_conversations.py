@@ -18,7 +18,9 @@ async def test_conversation_flow(async_client, auth_headers, monkeypatch, db_ses
     assert up.json()["status"] == "pending"
 
     # Manually mark document as ready so conversation can be created
-    doc = (await db_session.execute(select(Document).where(Document.id == uuid.UUID(doc_id)))).scalar_one()
+    doc = (await db_session.execute(
+        select(Document).where(Document.id == uuid.UUID(doc_id))
+    )).scalar_one()
     doc.status = "ready"
     await db_session.commit()
 
@@ -45,21 +47,28 @@ async def test_conversation_flow(async_client, auth_headers, monkeypatch, db_ses
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", ["pending", "processing", "failed"])
-async def test_conversation_rejects_non_ready_documents(async_client, auth_headers, monkeypatch, db_session, status):
+async def test_conversation_rejects_non_ready_documents(
+    async_client, auth_headers, monkeypatch, db_session, status
+):
     from app.services.ingestion_queue import FakeIngestionQueue
     from app.models.document import Document
     from app.models.user import User
     from sqlalchemy import select
 
-    monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: FakeIngestionQueue())
+    monkeypatch.setattr(
+        "app.api.v1.documents.CeleryIngestionQueue",
+        lambda settings: FakeIngestionQueue(),
+    )
 
     files = {"file": ("doc.txt", b"hello", "text/plain")}
     up = await async_client.post("/api/v1/documents/upload", files=files, headers=auth_headers)
     doc_id = up.json()["id"]
 
     # Manually set the document status
-    user = (await db_session.execute(select(User).where(User.email == "user@example.com"))).scalar_one()
-    doc = (await db_session.execute(select(Document).where(Document.id == uuid.UUID(doc_id)))).scalar_one()
+    await db_session.execute(select(User).where(User.email == "user@example.com"))
+    doc = (await db_session.execute(
+        select(Document).where(Document.id == uuid.UUID(doc_id))
+    )).scalar_one()
     doc.status = status
     await db_session.commit()
 

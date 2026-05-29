@@ -3,7 +3,7 @@ import pytest
 import app.worker.tasks
 from app.models.user import User
 from app.services.document_ingestion_repository import DocumentIngestionRepository
-from app.services.ingestion_errors import DeterministicIngestionError, RetryableIngestionError
+
 
 
 @pytest.mark.asyncio
@@ -15,7 +15,9 @@ async def test_worker_run_ingestion_calls_factory_and_commits(db_session, settin
             calls.append(document_id)
 
     monkeypatch.setattr("app.worker.tasks.build_ingestion_service", lambda **_: Service())
-    await app.worker.tasks.run_ingestion("00000000-0000-0000-0000-000000000001", session=db_session, settings=settings)
+    await app.worker.tasks.run_ingestion(
+        "00000000-0000-0000-0000-000000000001", session=db_session, settings=settings
+    )
     from uuid import UUID
 
     assert calls == [UUID("00000000-0000-0000-0000-000000000001")]

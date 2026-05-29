@@ -67,7 +67,9 @@ class IngestionService:
         try:
             document = await self.repo.get_document(document_id)
             if document is None:
-                raise DeterministicIngestionError("Document not found", IngestionPhase.DATABASE.value)
+                raise DeterministicIngestionError(
+                    "Document not found", IngestionPhase.DATABASE.value
+                )
             await self.repo.mark_processing(document_id)
 
             phase = IngestionPhase.STORAGE_READ

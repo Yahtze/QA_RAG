@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 
 
-async def mark_final_retry_failure(session, document_id: UUID, exc: BaseException, max_retries: int) -> None:
+async def mark_final_retry_failure(
+    session, document_id: UUID, exc: BaseException, max_retries: int
+) -> None:
     await DocumentIngestionRepository(session).mark_failed(
         document_id,
         error_message=f"Ingestion failed after {max_retries} retries: {exc}",
@@ -24,7 +26,9 @@ async def mark_final_retry_failure(session, document_id: UUID, exc: BaseExceptio
     )
 
 
-async def run_ingestion(document_id: UUID | str, *, session=None, settings: Settings | None = None) -> None:
+async def run_ingestion(
+    document_id: UUID | str, *, session=None, settings: Settings | None = None
+) -> None:
     settings = settings or get_settings()
     document_uuid = UUID(str(document_id))
     if session is not None:
