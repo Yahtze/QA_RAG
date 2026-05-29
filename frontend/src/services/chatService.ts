@@ -1,33 +1,65 @@
-import type { ChatResponse, RagDocument } from '@/types'
+import { apiRequest } from './apiClient'
+import type { ChatResponse, Citation, RagDocument } from '@/types'
 
-export async function askQuestion(document: RagDocument, query: string, shouldFail: boolean): Promise<ChatResponse> {
-  await delay(900)
+interface ConversationOut {
+  id: string
+  document_id: string
+  created_at: string
+}
 
-  if (shouldFail) {
-    throw new Error('Simulated chat error: retrieval worker timed out before returning an answer.')
-  }
+interface CitationOut {
+  id: string
+  document_id: string
+  chunk_text: string
+  page_number: number | null
+  score: number
+}
 
+interface MessageOut {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+  citations: CitationOut[]
+}
+
+interface MessagePairOut {
+  user_message: MessageOut
+  assistant_message: MessageOut
+}
+
+export async function createConversation(documentId: string): Promise<string> {
+  const response = await apiRequest<ConversationOut>('/conversations', {
+    method: 'POST',
+    body: JSON.stringify({ document_id: documentId }),
+  })
+  return response.id
+}
+
+export async function askQuestion(
+  conversationId: string,
+  document: RagDocument,
+  query: string,
+): Promise<ChatResponse> {
+  const pair = await apiRequest<MessagePairOut>(
+    `/conversations/${conversationId}/messages`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ content: query }),
+    },
+  )
   return {
-    answer: `Based on ${document.name}, the most relevant answer is that the QA RAG pipeline should keep ingestion, retrieval, and answer generation observable through clear status states. Your question was: “${query}”.`,
-    citations: [
-      {
-        id: `citation-${Date.now()}-1`,
-        documentId: document.id,
-        documentName: document.name,
-        page: 2,
-        snippet: 'The ingestion pipeline should expose progress from upload through embedding completion.',
-      },
-      {
-        id: `citation-${Date.now()}-2`,
-        documentId: document.id,
-        documentName: document.name,
-        page: 5,
-        snippet: 'Answer generation should return citations with enough context for reviewers to trust the result.',
-      },
-    ],
+    answer: pair.assistant_message.content,
+    citations: pair.assistant_message.citations.map(mapCitation(document)),
   }
 }
 
-function delay(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
+function mapCitation(document: RagDocument): (c: CitationOut) => Citation {
+  return (c: CitationOut) => ({
+    id: c.id,
+    documentId: c.document_id,
+    documentName: document.name,
+    page: c.page_number ?? 1,
+    snippet: c.chunk_text,
+  })
 }

@@ -4,3 +4,82 @@ services:
       context: ./frontend
     ports:
       - "8080:80"
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: qa_rag
+      POSTGRES_PASSWORD: qa_rag
+      POSTGRES_DB: qa_rag
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qa_rag -d qa_rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    working_dir: /app/backend
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      ENVIRONMENT: local
+      DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
+      ALEMBIC_DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
+      JWT_SECRET_KEY: dev-secret-change-me
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    working_dir: /app/backend
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: local
+      DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
+      ALEMBIC_DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
+      JWT_SECRET_KEY: dev-secret-change-me
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      BACKEND_CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION_NAME: documents
+      EMBEDDING_MODEL: text-embedding-3-small
+      EMBEDDING_DIMENSION: 1536
+      STORAGE_ROOT: /app/backend/storage
+      MAX_UPLOAD_BYTES: 52428800
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  qdrant_data:

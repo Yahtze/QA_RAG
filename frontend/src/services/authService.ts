@@ -1,23 +1,25 @@
+import { apiRequest } from './apiClient'
 import type { User } from '@/types'
 
-const demoUser: User = {
-  id: 'user-demo',
-  name: 'RAG Reviewer',
-  email: 'reviewer@example.com',
+interface TokenResponse {
+  access_token: string
+  token_type: 'bearer'
+  expires_in: number
+  user: User
 }
 
 export async function login(email: string, password: string): Promise<{ token: string; user: User }> {
-  void password
-  await delay(250)
-  return { token: `fake-token-${email}`, user: { ...demoUser, email } }
+  const response = await apiRequest<TokenResponse>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+  return { token: response.access_token, user: response.user }
 }
 
 export async function register(name: string, email: string, password: string): Promise<{ token: string; user: User }> {
-  void password
-  await delay(300)
-  return { token: `fake-token-${email}`, user: { ...demoUser, name, email } }
-}
-
-function delay(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
+  const response = await apiRequest<TokenResponse>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ name, email, password }),
+  })
+  return { token: response.access_token, user: response.user }
 }

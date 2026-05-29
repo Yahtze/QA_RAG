@@ -1,7 +1,6 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
-import { createUploadingDocument, processDocument, seededDocuments } from '@/services/documentService'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { listDocuments, uploadDocument } from '@/services/documentService'
 import type { RagDocument } from '@/types'
-import { useSimulationProfile } from './SimulationProfileContext'
 
 interface DocumentPipelineValue {
   documents: RagDocument[]
@@ -14,27 +13,31 @@ interface DocumentPipelineValue {
 const DocumentPipelineContext = createContext<DocumentPipelineValue | null>(null)
 
 export function DocumentPipelineProvider({ children }: { children: ReactNode }) {
-  const simulation = useSimulationProfile()
-  const [documents, setDocuments] = useState<RagDocument[]>(seededDocuments)
-  const [activeDocumentId, setActiveDocumentId] = useState('doc-architecture')
+  const [documents, setDocuments] = useState<RagDocument[]>([])
+  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null)
+
+  useEffect(() => {
+    listDocuments().then((docs) => {
+      setDocuments(docs)
+      if (!activeDocumentId && docs.length > 0) {
+        const firstReady = docs.find((d) => d.status === 'ready')
+        if (firstReady) setActiveDocumentId(firstReady.id)
+      }
+    }).catch(() => {
+      // fail silently — documents stay empty
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function upload(file: File) {
-    const uploading = await createUploadingDocument(file)
-    setDocuments((current) => [uploading, ...current])
-    const shouldFail = simulation.consumeUploadFailure()
-    const processed = await processDocument(uploading, shouldFail)
-    setDocuments((current) => current.map((doc) => doc.id === processed.id ? processed : doc))
-    if (processed.status === 'ready') setActiveDocumentId(processed.id)
+    const doc = await uploadDocument(file)
+    setDocuments((current) => [doc, ...current])
+    if (doc.status === 'ready') setActiveDocumentId(doc.id)
   }
 
   async function retry(documentId: string) {
-    const current = documents.find((doc) => doc.id === documentId)
-    if (!current) return
-    const uploading: RagDocument = { ...current, status: 'uploading', progress: 20, errorMessage: undefined, summary: 'Retry accepted. Uploading document again.' }
-    setDocuments((docs) => docs.map((doc) => doc.id === documentId ? uploading : doc))
-    const processed = await processDocument(uploading, false)
-    setDocuments((docs) => docs.map((doc) => doc.id === documentId ? processed : doc))
-    setActiveDocumentId(processed.id)
+    void documentId
+    // no-op: kept for API compatibility
   }
 
   function selectDocument(documentId: string) {

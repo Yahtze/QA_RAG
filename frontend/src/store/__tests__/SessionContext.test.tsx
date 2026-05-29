@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionProvider, useSession } from '../SessionContext'
 
 function Probe() {
@@ -15,7 +15,21 @@ function Probe() {
 }
 
 describe('Session module', () => {
+  afterEach(() => vi.restoreAllMocks())
+
   it('centralizes guest and authenticated redirects', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: 'fake-token',
+          token_type: 'bearer',
+          expires_in: 1800,
+          user: { id: 'user-1', name: 'Demo User', email: 'agent@example.com' },
+        }),
+        { status: 200 },
+      ),
+    )
+
     render(
       <SessionProvider>
         <Probe />

@@ -1,5 +1,6 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as authService from '@/services/authService'
+import { setAuthTokenProvider } from '@/services/apiClient'
 import type { User } from '@/types'
 
 interface SessionContextValue {
@@ -40,6 +41,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return token ? '/chat' : '/login'
     },
   }), [token, user])
+
+  useEffect(() => {
+    setAuthTokenProvider(() => token)
+    return () => setAuthTokenProvider(null)
+  }, [token])
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
 }

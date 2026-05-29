@@ -1,35 +1,87 @@
 import { renderHook, waitFor, act } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { DocumentPipelineProvider, useDocumentPipeline } from '../DocumentPipelineContext'
-import { SimulationProfileProvider, useSimulationProfile } from '../SimulationProfileContext'
 
-function wrapper({ children }: { children: React.ReactNode }) {
-  return <SimulationProfileProvider><DocumentPipelineProvider>{children}</DocumentPipelineProvider></SimulationProfileProvider>
-}
+const mockDocs = vi.hoisted(() => [
+  {
+    id: 'doc-1',
+    name: 'existing.pdf',
+    type: 'application/pdf',
+    sizeLabel: '1 KB',
+    uploadedAt: 'Today',
+    status: 'ready' as const,
+    progress: 100,
+    summary: 'Ready',
+  },
+])
 
-describe('Document Pipeline module', () => {
-  it('uploads a document through ready status', async () => {
-    const { result } = renderHook(() => useDocumentPipeline(), { wrapper })
-    const file = new File(['hello'], 'review-notes.pdf', { type: 'application/pdf' })
+vi.mock('@/services/documentService', () => ({
+  listDocuments: vi.fn().mockResolvedValue(mockDocs),
+  uploadDocument: vi.fn().mockImplementation((file: File) =>
+    Promise.resolve({
+      id: 'doc-uploaded',
+      name: file.name,
+      type: 'application/pdf',
+      sizeLabel: '5 KB',
+      uploadedAt: 'Just now',
+      status: 'ready' as const,
+      progress: 100,
+      summary: 'Document ready for questions.',
+    }),
+  ),
+  deleteDocument: vi.fn().mockResolvedValue(undefined),
+}))
 
-    await act(async () => { await result.current.upload(file) })
-
-    expect(result.current.documents.some((doc) => doc.name === 'review-notes.pdf')).toBe(true)
-    await waitFor(() => expect(result.current.documents.find((doc) => doc.name === 'review-notes.pdf')?.status).toBe('ready'), { timeout: 3000 })
+describe('DocumentPipelineContext', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
   })
 
-  it('fails deterministically and retries through ready status', async () => {
-    const { result } = renderHook(() => ({ pipeline: useDocumentPipeline(), simulation: useSimulationProfile() }), { wrapper })
-    const file = new File(['hello'], 'failure-case.pdf', { type: 'application/pdf' })
+  it('loads documents on mount', async () => {
+    const { result } = renderHook(() => useDocumentPipeline(), {
+      wrapper: DocumentPipelineProvider,
+    })
+    await waitFor(() => expect(result.current.documents).toEqual(mockDocs))
+  })
 
-    act(() => result.current.simulation.setFailNextUpload(true))
-    await act(async () => { await result.current.pipeline.upload(file) })
+  it('uploads a document and adds it to list', async () => {
+    const { result } = renderHook(() => useDocumentPipeline(), {
+      wrapper: DocumentPipelineProvider,
+    })
+    await waitFor(() => expect(result.current.documents).toHaveLength(1))
 
-    await waitFor(() => expect(result.current.pipeline.documents.find((doc) => doc.name === 'failure-case.pdf')?.status).toBe('failed'), { timeout: 3000 })
-    const failed = result.current.pipeline.documents.find((doc) => doc.name === 'failure-case.pdf')!
+    const file = new File(['hello'], 'new.pdf', { type: 'application/pdf' })
+    await act(async () => {
+      await result.current.upload(file)
+    })
 
-    await act(async () => { await result.current.pipeline.retry(failed.id) })
+    expect(result.current.documents).toHaveLength(2)
+    expect(result.current.documents[0]!.name).toBe('new.pdf')
+  })
 
-    await waitFor(() => expect(result.current.pipeline.documents.find((doc) => doc.id === failed.id)?.status).toBe('ready'), { timeout: 3000 })
+  it('selects uploaded ready document', async () => {
+    const { result } = renderHook(() => useDocumentPipeline(), {
+      wrapper: DocumentPipelineProvider,
+    })
+    await waitFor(() => expect(result.current.documents).toHaveLength(1))
+
+    const file = new File(['hello'], 'selectable.pdf', { type: 'application/pdf' })
+    await act(async () => {
+      await result.current.upload(file)
+    })
+
+    expect(result.current.activeDocument?.name).toBe('selectable.pdf')
+  })
+
+  it('retry is a no-op and does not throw', async () => {
+    const { result } = renderHook(() => useDocumentPipeline(), {
+      wrapper: DocumentPipelineProvider,
+    })
+    await waitFor(() => expect(result.current.documents).toHaveLength(1))
+
+    await act(async () => {
+      await result.current.retry('non-existent')
+    })
+    // Should not throw
   })
 })
