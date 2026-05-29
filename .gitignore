@@ -8,3 +8,18 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Documentation and agent files
+docs/
+AGENTS.md
+CONTEXT.md
+.antigravitycli/
+
+# Node/Frontend
+node_modules/
+frontend/node_modules/
+coverage/
+frontend/coverage/
+.vite/
+frontend/.vite/
+*.tsbuildinfo
