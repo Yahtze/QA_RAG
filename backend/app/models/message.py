@@ -21,6 +21,9 @@ class Message(Base, UUIDMixin, TimestampMixin):
     conversation_id = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
     role: Mapped[str] = mapped_column(String(20))
     content: Mapped[str] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retryable: Mapped[bool] = mapped_column(default=False, nullable=False)
+    original_query: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     conversation = relationship("Conversation", back_populates="messages")
     citations = relationship("Citation", back_populates="message", cascade="all, delete-orphan")

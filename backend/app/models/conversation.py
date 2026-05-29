@@ -1,5 +1,5 @@
-from sqlalchemy import ForeignKey, Index
-from sqlalchemy.orm import mapped_column, relationship
+from sqlalchemy import ForeignKey, Index, JSON
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
 
@@ -10,6 +10,7 @@ class Conversation(Base, UUIDMixin, TimestampMixin):
 
     user_id = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     document_id = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
+    active_document_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
     user = relationship("User", back_populates="conversations")
     document = relationship("Document", back_populates="conversations")

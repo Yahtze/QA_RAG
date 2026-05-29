@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     CELERY_TASK_IGNORE_RESULT: bool = True
     CELERY_WORKER_CONCURRENCY: int = Field(default=1, ge=1)
     CELERY_MAX_TASKS_PER_CHILD: int = Field(default=50, ge=1)
+    RETRIEVAL_BM25_TOP_K: int = Field(default=20, ge=1)
+    RETRIEVAL_SEMANTIC_TOP_K: int = Field(default=20, ge=1)
+    RETRIEVAL_FINAL_TOP_K: int = Field(default=8, ge=1)
+    CONTEXT_MAX_CHARS: int = Field(default=12_000, ge=1)
+    LLM_BASE_URL: str | None = None
+    LLM_API_KEY: SecretStr | None = None
+    LLM_MODEL: str = "gpt-4o-mini"
 
     @field_validator("ENVIRONMENT")
     @classmethod
@@ -43,6 +50,14 @@ class Settings(BaseSettings):
     @field_validator("EMBEDDING_BASE_URL", mode="before")
     @classmethod
     def normalize_embedding_base_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = str(value).strip()
+        return stripped or None
+
+    @field_validator("LLM_BASE_URL", mode="before")
+    @classmethod
+    def normalize_llm_base_url(cls, value: str | None) -> str | None:
         if value is None:
             return None
         stripped = str(value).strip()
@@ -80,7 +95,16 @@ class Settings(BaseSettings):
             self.CELERY_BROKER_URL = self.REDIS_URL
         if self.CELERY_RESULT_BACKEND is None:
             self.CELERY_RESULT_BACKEND = self.REDIS_URL
+        if self.RETRIEVAL_FINAL_TOP_K > self.RETRIEVAL_BM25_TOP_K + self.RETRIEVAL_SEMANTIC_TOP_K:
+            raise ValueError("RETRIEVAL_FINAL_TOP_K cannot exceed retrieval candidate pool")
         return self
+
+
+    def validate_llm_config(self) -> None:
+        if self.LLM_API_KEY is None:
+            raise ValueError("LLM_API_KEY is required")
+        if not self.LLM_MODEL.strip():
+            raise ValueError("LLM_MODEL is required")
 
 
 @lru_cache
