@@ -13,6 +13,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "dev-secret-change-me")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
 os.environ.setdefault("STORAGE_ROOT", "backend/storage_test")
+os.environ.setdefault("OPENAI_API_KEY", "sk-test")
 
 from app.api.deps import get_db_session, get_settings_dep  # noqa: E402
 from app.core.config import Settings  # noqa: E402
@@ -30,6 +31,7 @@ def settings(tmp_path) -> Settings:
         REDIS_URL="redis://localhost:6379/0",
         QDRANT_URL="http://localhost:6333",
         STORAGE_ROOT=str(tmp_path / "storage"),
+        OPENAI_API_KEY="sk-test",
     )
 
 

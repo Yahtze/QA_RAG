@@ -2,8 +2,19 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_conversation_flow(async_client, auth_headers):
-    files = {"file": ("doc.pdf", b"%PDF-1.4 test", "application/pdf")}
+async def test_conversation_flow(async_client, auth_headers, monkeypatch):
+    async def _embed(self, texts):
+        return [[0.1] * self.dimension for _ in texts]
+
+    async def _noop(self, *args, **kwargs):
+        return None
+
+    monkeypatch.setattr("app.services.embeddings.OpenAIEmbeddingProvider.embed_texts", _embed)
+    monkeypatch.setattr("app.services.vector_store.QdrantVectorStore.ensure_collection", _noop)
+    monkeypatch.setattr("app.services.vector_store.QdrantVectorStore.delete_document_points", _noop)
+    monkeypatch.setattr("app.services.vector_store.QdrantVectorStore.upsert_chunks", _noop)
+
+    files = {"file": ("doc.txt", b"hello world", "text/plain")}
     up = await async_client.post("/api/v1/documents/upload", files=files, headers=auth_headers)
     doc_id = up.json()["id"]
 

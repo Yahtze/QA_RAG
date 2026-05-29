@@ -7,7 +7,7 @@ from app.schemas.conversation import (
     MessageOut,
     MessagePairOut,
 )
-from app.schemas.document import DocumentOut
+from app.schemas.document import DeletedDocumentOut, DocumentAdminOut, DocumentOut
 from app.schemas.user import UserCreate, UserOut
 
 __all__ = [
@@ -16,6 +16,8 @@ __all__ = [
     "LoginRequest",
     "TokenResponse",
     "DocumentOut",
+    "DocumentAdminOut",
+    "DeletedDocumentOut",
     "ConversationCreate",
     "ConversationOut",
     "MessageCreate",

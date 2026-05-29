@@ -6,14 +6,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_settings_dep
 from app.core.pagination import CursorPage
 from app.db.session import get_db_session
-from app.schemas.document import DocumentOut
+from app.schemas.document import DeletedDocumentOut, DocumentOut
 from app.services.document_pipeline import DocumentPipelineService, ForbiddenError, NotFoundError
+from app.services.embeddings import OpenAIEmbeddingProvider
+from app.services.ingestion import IngestionService
 from app.services.storage import (
     DisallowedContentTypeError,
     InvalidPdfError,
     LocalStorageService,
     UploadTooLargeError,
 )
+from app.services.vector_store import QdrantVectorStore
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -25,7 +28,20 @@ async def upload(
     session: AsyncSession = Depends(get_db_session),
     settings=Depends(get_settings_dep),
 ):
-    service = DocumentPipelineService(session, LocalStorageService(settings))
+    storage = LocalStorageService(settings)
+    vector_store = QdrantVectorStore(settings)
+    service = DocumentPipelineService(
+        session,
+        storage,
+        ingestion_service=IngestionService(
+            session=session,
+            settings=settings,
+            storage=storage,
+            embedding_provider=OpenAIEmbeddingProvider(settings),
+            vector_store=vector_store,
+        ),
+        vector_store=vector_store,
+    )
     try:
         return await service.upload(user=user, upload_file=file)
     except UploadTooLargeError:
@@ -64,7 +80,7 @@ async def get_document(
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
-@router.delete("/{document_id}", status_code=204)
+@router.delete("/{document_id}", response_model=DeletedDocumentOut, status_code=200)
 async def delete_document(
     document_id: UUID,
     user=Depends(get_current_user),
@@ -72,9 +88,10 @@ async def delete_document(
     settings=Depends(get_settings_dep),
 ):
     try:
-        await DocumentPipelineService(session, LocalStorageService(settings)).delete(
-            user=user, document_id=document_id
+        service = DocumentPipelineService(
+            session, LocalStorageService(settings), vector_store=QdrantVectorStore(settings)
         )
+        return await service.delete(user=user, document_id=document_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Not found")
     except ForbiddenError:

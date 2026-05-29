@@ -41,3 +41,9 @@ backend-migrate:
 
 backend-revision:
 	cd backend && ../.venv/bin/python -m alembic revision --autogenerate -m "$(name)"
+
+backend-reconcile-ingestion:
+	cd backend && ../.venv/bin/python -m app.cli.reconcile_ingestion
+
+backend-reconcile-ingestion-apply:
+	cd backend && ../.venv/bin/python -m app.cli.reconcile_ingestion --no-dry-run
