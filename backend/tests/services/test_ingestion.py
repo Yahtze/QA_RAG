@@ -3,6 +3,7 @@ import pytest
 from app.models.user import User
 from app.services.embeddings import FakeEmbeddingProvider
 from app.services.ingestion import TEXT_ZERO_CHUNKS_ERROR, IngestionService
+from app.services.ingestion_errors import DeterministicIngestionError
 from app.services.vector_store import VectorStore
 
 

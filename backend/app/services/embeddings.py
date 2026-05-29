@@ -5,6 +5,7 @@ from openai import APIConnectionError, APIStatusError, AsyncOpenAI, RateLimitErr
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.core.config import Settings
+from app.services.ingestion_errors import DeterministicIngestionError, RetryableIngestionError
 
 
 class EmbeddingProvider(Protocol):
@@ -56,10 +57,21 @@ class OpenAIEmbeddingProvider:
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
-        for start in range(0, len(texts), self.batch_size):
-            vectors.extend(await self._embed_batch(texts[start : start + self.batch_size]))
-        validate_embeddings(texts=texts, vectors=vectors, dimension=self.dimension)
-        return vectors
+        try:
+            for start in range(0, len(texts), self.batch_size):
+                vectors.extend(await self._embed_batch(texts[start : start + self.batch_size]))
+            validate_embeddings(texts=texts, vectors=vectors, dimension=self.dimension)
+            return vectors
+        except (RateLimitError, APIConnectionError) as exc:
+            raise RetryableIngestionError("embedding", exc) from exc
+        except APIStatusError as exc:
+            if exc.status_code == 400:
+                raise DeterministicIngestionError(str(exc), "embedding") from exc
+            if exc.status_code >= 500:
+                raise RetryableIngestionError("embedding", exc) from exc
+            raise DeterministicIngestionError(str(exc), "embedding") from exc
+        except EmbeddingValidationError as exc:
+            raise DeterministicIngestionError(str(exc), "embedding") from exc
 
 
 class FakeEmbeddingProvider:

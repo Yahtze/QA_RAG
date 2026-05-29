@@ -14,6 +14,7 @@ from app.services.embeddings import EmbeddingProvider
 from app.services.ingestion_types import IngestionPhase
 from app.services.storage import LocalStorageService
 from app.services.vector_store import VectorStore
+from app.services.ingestion_errors import DeterministicIngestionError, RetryableIngestionError
 
 logger = logging.getLogger(__name__)
 
@@ -22,20 +23,6 @@ TEXT_ZERO_CHUNKS_ERROR = "No extractable text found in document."
 GENERIC_INGESTION_ERROR = (
     "An unexpected error occurred during ingestion. The document has been retained for review."
 )
-
-
-class NonRetryableIngestionError(Exception):
-    def __init__(self, message: str, phase: IngestionPhase):
-        super().__init__(message)
-        self.message = message
-        self.phase = phase
-
-
-class RetryableIngestionError(Exception):
-    def __init__(self, phase: IngestionPhase, cause: BaseException):
-        super().__init__(str(cause))
-        self.phase = phase
-        self.cause = cause
 
 
 class IngestionService:
@@ -69,14 +56,18 @@ class IngestionService:
             size_bytes=stored.size_bytes,
             storage_path=stored.storage_path,
         )
-        return await self.ingest_document(document.id)
+        try:
+            return await self.ingest_document(document.id)
+        except DeterministicIngestionError:
+            document = await self.repo.get_document(document.id)
+            return DocumentOut.model_validate(document)
 
     async def ingest_document(self, document_id):
         phase = IngestionPhase.DATABASE
         try:
             document = await self.repo.get_document(document_id)
             if document is None:
-                raise NonRetryableIngestionError("Document not found", IngestionPhase.DATABASE)
+                raise DeterministicIngestionError("Document not found", IngestionPhase.DATABASE.value)
             await self.repo.mark_processing(document_id)
 
             phase = IngestionPhase.STORAGE_READ
@@ -106,8 +97,8 @@ class IngestionService:
                             "page_count": extracted.page_count,
                         },
                     )
-                    raise NonRetryableIngestionError(PDF_ZERO_CHUNKS_ERROR, phase)
-                raise NonRetryableIngestionError(TEXT_ZERO_CHUNKS_ERROR, phase)
+                    raise DeterministicIngestionError(PDF_ZERO_CHUNKS_ERROR, phase.value)
+                raise DeterministicIngestionError(TEXT_ZERO_CHUNKS_ERROR, phase.value)
 
             phase = IngestionPhase.EMBEDDING
             vectors = await self.embedding_provider.embed_texts([c.text for c in chunks])
@@ -128,16 +119,21 @@ class IngestionService:
             )
             document = await self.repo.get_document(document.id)
             return DocumentOut.model_validate(document)
-        except (ExtractionError, NonRetryableIngestionError) as exc:
-            msg = exc.message if isinstance(exc, NonRetryableIngestionError) else exc.message
+        except (ExtractionError, DeterministicIngestionError) as exc:
+            msg = exc.message
             fail_phase = (
-                exc.phase
-                if isinstance(exc, NonRetryableIngestionError)
+                IngestionPhase(exc.phase)
+                if isinstance(exc, DeterministicIngestionError)
                 else IngestionPhase.EXTRACTION
             )
             await self.repo.mark_failed(document_id, error_message=msg, phase=fail_phase)
-            document = await self.repo.get_document(document_id)
-            return DocumentOut.model_validate(document)
+            raise
+        except RetryableIngestionError:
+            logger.warning(
+                "document_ingestion_retryable_failure",
+                extra={"document_id": str(document_id), "phase": phase.value},
+            )
+            raise
         except Exception:
             logger.exception(
                 "document_ingestion_failed",

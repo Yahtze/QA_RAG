@@ -10,7 +10,9 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 
 from app.core.config import Settings
 from app.services.chunking import ChunkRecord
+from app.services.ingestion_types import IngestionPhase
 from app.services.qdrant_collection import QdrantCollectionService
+from app.services.ingestion_errors import DeterministicIngestionError, IngestionError, RetryableIngestionError
 
 DocumentChunkForVector = ChunkRecord
 
@@ -40,6 +42,16 @@ class VectorStore(Protocol):
     ) -> None: ...
 
 
+def _classify_qdrant_error(exc: BaseException) -> IngestionError:
+    if isinstance(exc, ResponseHandlingException):
+        return RetryableIngestionError("vector_sync", exc)
+    if isinstance(exc, UnexpectedResponse):
+        if exc.status_code >= 500:
+            return RetryableIngestionError("vector_sync", exc)
+        return DeterministicIngestionError(str(exc), "vector_sync")
+    return RetryableIngestionError("vector_sync", exc)
+
+
 def _retryable_qdrant(exc: BaseException) -> bool:
     if isinstance(exc, UnexpectedResponse):
         return exc.status_code >= 500
@@ -53,7 +65,12 @@ class QdrantVectorStore:
         self.client = AsyncQdrantClient(url=settings.QDRANT_URL)
 
     async def ensure_collection(self) -> None:
-        await self.collection_service.ensure_collection()
+        try:
+            await self.collection_service.ensure_collection()
+        except (RetryableIngestionError, DeterministicIngestionError):
+            raise
+        except (ResponseHandlingException, UnexpectedResponse) as exc:
+            raise _classify_qdrant_error(exc) from exc
 
     @retry(
         retry=retry_if_exception(_retryable_qdrant),
@@ -62,13 +79,18 @@ class QdrantVectorStore:
         reraise=True,
     )
     async def delete_document_points(self, document_id: UUID) -> None:
-        flt = qm.Filter(
-            must=[qm.FieldCondition(key="document_id", match=qm.MatchValue(value=str(document_id)))]
-        )
-        await self.client.delete(
-            collection_name=self.settings.QDRANT_COLLECTION_NAME,
-            points_selector=qm.FilterSelector(filter=flt),
-        )
+        try:
+            flt = qm.Filter(
+                must=[qm.FieldCondition(key="document_id", match=qm.MatchValue(value=str(document_id)))]
+            )
+            await self.client.delete(
+                collection_name=self.settings.QDRANT_COLLECTION_NAME,
+                points_selector=qm.FilterSelector(filter=flt),
+            )
+        except (RetryableIngestionError, DeterministicIngestionError):
+            raise
+        except (ResponseHandlingException, UnexpectedResponse) as exc:
+            raise _classify_qdrant_error(exc) from exc
 
     @retry(
         retry=retry_if_exception(_retryable_qdrant),
@@ -79,13 +101,18 @@ class QdrantVectorStore:
     async def upsert_chunks(
         self, *, user_id: UUID, chunks: list[DocumentChunkForVector], vectors: list[list[float]]
     ) -> None:
-        points = [
-            qm.PointStruct(
-                id=str(chunk.id), vector=vector, payload=build_payload(user_id=user_id, chunk=chunk)
-            )
-            for chunk, vector in zip(chunks, vectors, strict=True)
-        ]
-        if points:
-            await self.client.upsert(
-                collection_name=self.settings.QDRANT_COLLECTION_NAME, points=points
-            )
+        try:
+            points = [
+                qm.PointStruct(
+                    id=str(chunk.id), vector=vector, payload=build_payload(user_id=user_id, chunk=chunk)
+                )
+                for chunk, vector in zip(chunks, vectors, strict=True)
+            ]
+            if points:
+                await self.client.upsert(
+                    collection_name=self.settings.QDRANT_COLLECTION_NAME, points=points
+                )
+        except (RetryableIngestionError, DeterministicIngestionError):
+            raise
+        except (ResponseHandlingException, UnexpectedResponse) as exc:
+            raise _classify_qdrant_error(exc) from exc
