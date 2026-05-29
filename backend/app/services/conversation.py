@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -10,39 +12,34 @@ from app.core.pagination import (
 )
 from app.models import Citation, Conversation, Document, DocumentStatus, Message, MessageRole, User
 from app.schemas.conversation import CitationOut, ConversationOut, MessageOut, MessagePairOut
+from app.services.conversation_scope import ConversationScopeService
+from app.services.conversation_errors import ForbiddenError, InvalidStateError, NotFoundError
 
 ASSISTANT_STUB = "This is a placeholder answer generated before RAG ingestion is implemented."
 CITATION_STUB = "Stub citation text for frontend wiring."
-
-
-class NotFoundError(Exception): ...
-
-
-class ForbiddenError(Exception): ...
-
-
-class InvalidStateError(Exception): ...
 
 
 class ConversationService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create(self, *, user: User, document_id):
-        doc = (
-            await self.session.execute(select(Document).where(Document.id == document_id))
-        ).scalar_one_or_none()
-        if not doc:
-            raise NotFoundError
-        if doc.user_id != user.id:
-            raise ForbiddenError
-        if doc.status != DocumentStatus.READY.value:
-            raise InvalidStateError
-        c = Conversation(user_id=user.id, document_id=document_id)
-        self.session.add(c)
-        await self.session.commit()
-        await self.session.refresh(c)
-        return ConversationOut.model_validate(c, from_attributes=True)
+    def _conversation_out(self, conv: Conversation, dangling_user_message_id=None) -> ConversationOut:
+        return ConversationOut(
+            id=conv.id,
+            document_id=conv.document_id,
+            active_document_ids=[UUID(str(x)) for x in (conv.active_document_ids or [])],
+            dangling_user_message_id=dangling_user_message_id,
+            needs_retry=dangling_user_message_id is not None,
+            created_at=conv.created_at,
+        )
+
+    async def create(self, *, user: User, document_id, active_document_ids: list | None = None):
+        conv = await ConversationScopeService(self.session).create_conversation(
+            user=user,
+            document_id=document_id,
+            active_document_ids=active_document_ids or [],
+        )
+        return self._conversation_out(conv, dangling_user_message_id=None)
 
     async def list(self, *, user: User, cursor: str | None, limit: int | None):
         lim = normalize_limit(limit)

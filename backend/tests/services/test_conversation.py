@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models import Conversation, Document, DocumentStatus, User
-from app.services.conversation import ASSISTANT_STUB, CITATION_STUB, ConversationService
+from app.services.conversation import ConversationService
 
 
 @pytest.mark.asyncio
@@ -26,9 +26,10 @@ async def test_create_send_messages(db_session):
 
     svc = ConversationService(db_session)
     conv = await svc.create(user=user, document_id=doc.id)
+    assert conv.active_document_ids == [doc.id]
     pair = await svc.send_message(user=user, conversation_id=conv.id, content="hi")
-    assert pair.assistant_message.content == ASSISTANT_STUB
-    assert pair.assistant_message.citations[0].chunk_text == CITATION_STUB
+    assert pair.assistant_message.content == "This is a placeholder answer generated before RAG ingestion is implemented."
+    assert pair.assistant_message.citations[0].chunk_text == "Stub citation text for frontend wiring."
 
     history = await svc.messages(user=user, conversation_id=conv.id, cursor=None, limit=20)
     assert len(history.items) == 2

@@ -13,12 +13,8 @@ from app.schemas.conversation import (
     MessageOut,
     MessagePairOut,
 )
-from app.services.conversation import (
-    ConversationService,
-    ForbiddenError,
-    InvalidStateError,
-    NotFoundError,
-)
+from app.services.conversation import ConversationService
+from app.services.conversation_errors import ForbiddenError, InvalidStateError, NotFoundError
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
