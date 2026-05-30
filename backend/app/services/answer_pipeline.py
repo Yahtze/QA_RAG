@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Literal, Protocol
@@ -14,6 +15,7 @@ from app.services.conversation_errors import ForbiddenError, NotFoundError
 from app.services.conversation_scope import ConversationScopeService
 from app.services.prompt_builder import build_grounded_messages
 from app.services.retrieval_types import RetrievalResult
+from app.services.semantic_cache import RedisSemanticCache
 
 ABSTENTION = (
     "I don't have enough information in the active documents to answer this yet. "
@@ -43,11 +45,13 @@ class AnswerPipeline:
         settings: Settings,
         retriever: RetrievalProvider,
         llm,
+        semantic_cache: RedisSemanticCache | None = None,
     ):
         self.session = session
         self.settings = settings
         self.retriever = retriever
         self.llm = llm
+        self.semantic_cache = semantic_cache
 
     async def answer(
         self,
@@ -78,6 +82,20 @@ class AnswerPipeline:
         )
         self.session.add(user_message)
         await self.session.commit()
+
+        cache_hit = await self._semantic_cache_get(content)
+        if cache_hit is not None:
+            assistant = Message(
+                conversation_id=conversation_id,
+                role=MessageRole.ASSISTANT.value,
+                content=cache_hit.answer,
+            )
+            self.session.add(assistant)
+            await self.session.commit()
+            yield AnswerEvent(type="token", value=cache_hit.answer)
+            yield AnswerEvent(type="citations", map=cache_hit.citations)
+            yield AnswerEvent(type="done")
+            return
 
         result = await self.retriever.retrieve(
             user_id=user.id,
@@ -145,5 +163,50 @@ class AnswerPipeline:
         )
         await self.session.commit()
 
-        yield AnswerEvent(type="citations", map=citations_event_map(packed.chunks))
+        citation_map = citations_event_map(packed.chunks)
+        self._semantic_cache_set_async(
+            query=content,
+            answer="".join(answer_parts),
+            citations=citation_map,
+        )
+
+        yield AnswerEvent(type="citations", map=citation_map)
         yield AnswerEvent(type="done")
+
+    async def _semantic_cache_get(self, query: str):
+        if not self.settings.SEMANTIC_CACHE_ENABLED or self.semantic_cache is None:
+            return None
+        timeout_s = self.settings.SEMANTIC_CACHE_TIMEOUT_MS / 1000
+        try:
+            return await asyncio.wait_for(
+                self.semantic_cache.get(query=query),
+                timeout=timeout_s,
+            )
+        except Exception:
+            return None
+
+    def _semantic_cache_set_async(
+        self,
+        *,
+        query: str,
+        answer: str,
+        citations: dict[str, dict[str, object]],
+    ) -> None:
+        if not self.settings.SEMANTIC_CACHE_ENABLED or self.semantic_cache is None:
+            return
+
+        async def _write() -> None:
+            timeout_s = self.settings.SEMANTIC_CACHE_TIMEOUT_MS / 1000
+            try:
+                await asyncio.wait_for(
+                    self.semantic_cache.set(
+                        query=query,
+                        answer=answer,
+                        citations=citations,
+                    ),
+                    timeout=timeout_s,
+                )
+            except Exception:
+                return
+
+        asyncio.create_task(_write())

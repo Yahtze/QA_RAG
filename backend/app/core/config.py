@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str | None = None
     LLM_API_KEY: SecretStr | None = None
     LLM_MODEL: str = "gpt-4o-mini"
+    SEMANTIC_CACHE_ENABLED: bool = False
+    SEMANTIC_CACHE_TTL_SECONDS: int = Field(default=86_400, ge=1)
+    SEMANTIC_CACHE_MIN_SIMILARITY: float = Field(default=0.85, ge=0.0, le=1.0)
+    SEMANTIC_CACHE_TIMEOUT_MS: int = Field(default=75, ge=1)
+    SEMANTIC_CACHE_INDEX_NAME: str = "idx:semcache"
+    SEMANTIC_CACHE_KEY_PREFIX: str = "semcache:"
 
     @field_validator("ENVIRONMENT")
     @classmethod
