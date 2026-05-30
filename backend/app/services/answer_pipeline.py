@@ -10,14 +10,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings
-from app.models import Conversation, Message, MessageRole, User
+from app.models import (
+    Conversation,
+    Document,
+    DocumentChunk,
+    DocumentStatus,
+    Message,
+    MessageRole,
+    User,
+)
 from app.services.citation_mapper import citation_rows, citations_event_map
 from app.services.context_packer import pack_context
 from app.services.conversation_errors import ForbiddenError, NotFoundError
 from app.services.conversation_scope import ConversationScopeService
 from app.services.prompt_builder import HistoryTurn, build_grounded_messages
-from app.services.retrieval_types import RetrievalResult
+from app.services.retrieval_types import RetrievedChunk, RetrievalResult
 from app.services.semantic_cache import RedisSemanticCache
+from app.services.vector_store import ChunkHydrationError
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +46,12 @@ class AnswerEvent:
     reason: str | None = None
 
 
+@dataclass(frozen=True)
+class HydratedCitations:
+    chunks: list[RetrievedChunk]
+    citation_map: dict[str, dict[str, object]]
+
+
 class RetrievalProvider(Protocol):
     async def retrieve(self, **kwargs) -> RetrievalResult: ...
 
@@ -50,12 +65,14 @@ class AnswerPipeline:
         retriever: RetrievalProvider,
         llm,
         semantic_cache: RedisSemanticCache | None = None,
+        vector_store=None,
     ):
         self.session = session
         self.settings = settings
         self.retriever = retriever
         self.llm = llm
         self.semantic_cache = semantic_cache
+        self.vector_store = vector_store
 
     async def answer(
         self,
@@ -92,17 +109,33 @@ class AnswerPipeline:
             document_ids=[str(d) for d in scope.active_document_ids],
         )
         if cache_hit is not None:
-            assistant = Message(
+            hydrated = await self._hydrate_cached_citations(
+                chunk_ids=cache_hit.chunk_ids,
+                user_id=user.id,
+                scope=scope,
                 conversation_id=conversation_id,
-                role=MessageRole.ASSISTANT.value,
-                content=cache_hit.answer,
             )
-            self.session.add(assistant)
-            await self.session.commit()
-            yield AnswerEvent(type="token", value=cache_hit.answer)
-            yield AnswerEvent(type="citations", map=cache_hit.citations)
-            yield AnswerEvent(type="done")
-            return
+            if hydrated is not None:
+                assistant = Message(
+                    conversation_id=conversation_id,
+                    role=MessageRole.ASSISTANT.value,
+                    content=cache_hit.answer,
+                )
+                self.session.add(assistant)
+                await self.session.flush()
+                self.session.add_all(
+                    citation_rows(message_id=assistant.id, chunks=hydrated.chunks)
+                )
+                await self.session.commit()
+                yield AnswerEvent(type="token", value=cache_hit.answer)
+                yield AnswerEvent(type="citations", map=hydrated.citation_map)
+                yield AnswerEvent(type="done")
+                return
+            # Hydration failed: fall through to full RAG pipeline
+            logger.warning(
+                "semantic_cache_hydration_failed_fallback chunk_ids=%s",
+                cache_hit.chunk_ids,
+            )
 
         result = await self.retriever.retrieve(
             user_id=user.id,
@@ -177,14 +210,16 @@ class AnswerPipeline:
         self._semantic_cache_set_async(
             query=content,
             answer="".join(answer_parts),
-            citations=citation_map,
+            chunk_ids=[str(c.chunk_id) for c in packed.chunks],
             document_ids=[str(d) for d in scope.active_document_ids],
         )
 
         yield AnswerEvent(type="citations", map=citation_map)
         yield AnswerEvent(type="done")
 
-    async def _semantic_cache_get(self, query: str, document_ids: list[str] | None = None):
+    async def _semantic_cache_get(
+        self, query: str, document_ids: list[str] | None = None
+    ):
         if not self.settings.SEMANTIC_CACHE_ENABLED or self.semantic_cache is None:
             return None
         try:
@@ -209,7 +244,7 @@ class AnswerPipeline:
         *,
         query: str,
         answer: str,
-        citations: dict[str, dict[str, object]],
+        chunk_ids: list[str],
         document_ids: list[str] | None = None,
     ) -> None:
         if not self.settings.SEMANTIC_CACHE_ENABLED or self.semantic_cache is None:
@@ -220,7 +255,7 @@ class AnswerPipeline:
                 await self.semantic_cache.set(
                     query=query,
                     answer=answer,
-                    citations=citations,
+                    chunk_ids=chunk_ids,
                     document_ids=document_ids,
                 )
                 logger.info("semantic_cache_pipeline_write status=ok")
@@ -235,6 +270,93 @@ class AnswerPipeline:
                 return
 
         asyncio.create_task(_write())
+
+    async def _hydrate_cached_citations(
+        self,
+        *,
+        chunk_ids: list[str],
+        user_id: UUID,
+        scope,
+        conversation_id: UUID,
+    ) -> HydratedCitations | None:
+        """Hydrate cached chunk IDs into fresh citation data.
+
+        Two-Pass Hydration: fetch live metadata from Qdrant + DB for chunk IDs
+        stored in the semantic cache. Returns None if hydration fails or yields
+        no valid chunks (caller should fall back to full RAG).
+        """
+        if not chunk_ids:
+            return None
+        if self.vector_store is None:
+            logger.warning("semantic_cache_hydration_skip reason=no_vector_store")
+            return None
+
+        # Pass 1: Verify chunks still exist in Qdrant
+        try:
+            payloads = await self.vector_store.retrieve_by_ids(chunk_ids)
+        except ChunkHydrationError as exc:
+            logger.warning("semantic_cache_hydration_qdrant_error error=%s", str(exc))
+            return None
+        except Exception as exc:
+            logger.warning(
+                "semantic_cache_hydration_unexpected_error error=%s", str(exc)
+            )
+            return None
+
+        if not payloads:
+            return None
+
+        # Pass 2: Fetch fresh metadata from DB, filtering by user + scope + ready
+        chunk_uuids = [UUID(cid) for cid in chunk_ids]
+        rows = list(
+            (
+                await self.session.execute(
+                    select(DocumentChunk, Document)
+                    .join(Document, Document.id == DocumentChunk.document_id)
+                    .where(
+                        DocumentChunk.id.in_(chunk_uuids),
+                        Document.user_id == user_id,
+                        Document.id.in_(scope.ready_document_ids),
+                        Document.status == DocumentStatus.READY.value,
+                    )
+                )
+            ).all()
+        )
+
+        if not rows:
+            return None
+
+        db_chunks: dict[UUID, tuple[DocumentChunk, Document]] = {
+            chunk.id: (chunk, doc) for chunk, doc in rows
+        }
+
+        # Rebuild in original cache order, skipping deleted/inaccessible chunks
+        hydrated_chunks: list[RetrievedChunk] = []
+        for idx, cid in enumerate(chunk_ids):
+            chunk_uuid = UUID(cid)
+            if chunk_uuid not in db_chunks:
+                continue
+            chunk, doc = db_chunks[chunk_uuid]
+            hydrated_chunks.append(
+                RetrievedChunk(
+                    chunk_id=chunk.id,
+                    document_id=doc.id,
+                    filename=doc.filename,
+                    page=chunk.page,
+                    text=chunk.text,
+                    lexical_rank=None,
+                    semantic_rank=None,
+                    fused_rank=idx + 1,
+                    fused_score=None,
+                    citation_label=str(idx + 1),
+                )
+            )
+
+        if not hydrated_chunks:
+            return None
+
+        citation_map = citations_event_map(hydrated_chunks)
+        return HydratedCitations(chunks=hydrated_chunks, citation_map=citation_map)
 
     async def _build_history(self, conversation_id: UUID) -> list[HistoryTurn]:
         result = await self.session.execute(
@@ -259,9 +381,11 @@ class AnswerPipeline:
                 for citation in msg.citations:
                     page = f" p.{citation.page_number}" if citation.page_number else ""
                     label = citation.label or "?"
-                    ctx_parts.append(
-                        f"[{label}] {citation.filename}{page}\n{citation.chunk_text.strip()}"
+                    text = (
+                        f"[{label}] {citation.filename}{page}"
+                        f"\n{citation.chunk_text.strip()}"
                     )
+                    ctx_parts.append(text)
                 context_text = "\n\n".join(ctx_parts) if ctx_parts else "(no context)"
                 turns.append(
                     HistoryTurn(

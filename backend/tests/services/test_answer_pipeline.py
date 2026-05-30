@@ -50,13 +50,28 @@ class FakeSemanticCache:
         self.hit = hit
         self.get_called = False
         self.set_called = False
+        self.set_chunk_ids = None
 
     async def get(self, *, query: str, document_ids=None):
         self.get_called = True
         return self.hit
 
-    async def set(self, *, query: str, answer: str, citations: dict, document_ids=None):
+    async def set(self, *, query: str, answer: str, chunk_ids: list, document_ids=None):
         self.set_called = True
+        self.set_chunk_ids = chunk_ids
+
+
+class FakeVectorStore:
+    def __init__(self, payloads=None, exc=None):
+        self.payloads = payloads or []
+        self.exc = exc
+        self.retrieve_called = False
+
+    async def retrieve_by_ids(self, ids):
+        self.retrieve_called = True
+        if self.exc:
+            raise self.exc
+        return self.payloads
 
 
 async def fixture(db_session):
@@ -204,8 +219,11 @@ async def test_semantic_cache_hit_skips_retriever_and_llm(db_session, settings):
     cache = FakeSemanticCache(
         SemanticCacheHit(
             answer="Cached answer",
-            citations={"1": {"filename": "guide.pdf"}},
+            chunk_ids=[str(chunk.id)],
         )
+    )
+    vector_store = FakeVectorStore(
+        payloads=[{"document_id": str(doc.id), "text": chunk.text, "page": chunk.page}]
     )
     llm = FakeLLM(["unused"])
     pipeline = AnswerPipeline(
@@ -214,6 +232,7 @@ async def test_semantic_cache_hit_skips_retriever_and_llm(db_session, settings):
         retriever=FakeRetriever(RetrievalResult([], None)),
         llm=llm,
         semantic_cache=cache,
+        vector_store=vector_store,
     )
 
     events = [
@@ -224,9 +243,11 @@ async def test_semantic_cache_hit_skips_retriever_and_llm(db_session, settings):
     ]
 
     assert cache.get_called is True
+    assert vector_store.retrieve_called is True
     assert llm.called is False
     assert [event.type for event in events] == ["token", "citations", "done"]
     assert events[0].value == "Cached answer"
+    assert events[1].map["1"]["filename"] == "guide.pdf"
 
 
 @pytest.mark.asyncio
@@ -256,3 +277,48 @@ async def test_semantic_cache_miss_writes_async(db_session, settings):
 
     assert cache.get_called is True
     assert cache.set_called is True
+    assert cache.set_chunk_ids == [str(chunk.id)]
+
+
+@pytest.mark.asyncio
+async def test_semantic_cache_hit_fallback_on_hydration_failure(db_session, settings):
+    """When hydration fails (Qdrant error), pipeline falls back to full RAG."""
+    user, doc, chunk, conv = await fixture(db_session)
+    settings.SEMANTIC_CACHE_ENABLED = True
+    cache = FakeSemanticCache(
+        SemanticCacheHit(
+            answer="Cached answer",
+            chunk_ids=[str(chunk.id)],
+        )
+    )
+    from app.services.vector_store import ChunkHydrationError
+
+    vector_store = FakeVectorStore(exc=ChunkHydrationError("qdrant down"))
+    result = RetrievalResult(
+        [RetrievedChunk(chunk.id, doc.id, "guide.pdf", 2, chunk.text, 1, None, 1, 0.5)],
+        None,
+    )
+    llm = FakeLLM(["Fresh answer"])
+    pipeline = AnswerPipeline(
+        db_session,
+        settings=settings,
+        retriever=FakeRetriever(result),
+        llm=llm,
+        semantic_cache=cache,
+        vector_store=vector_store,
+    )
+
+    events = [
+        event
+        async for event in pipeline.answer(
+            user=user, conversation_id=conv.id, content="Refunds?"
+        )
+    ]
+
+    # Should fall back to full RAG pipeline
+    assert cache.get_called is True
+    assert vector_store.retrieve_called is True
+    assert llm.called is True
+    assert events[0].type == "token"
+    assert events[0].value == "Fresh answer"
+    assert events[-1].type == "done"

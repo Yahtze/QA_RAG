@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class SemanticCacheHit:
     answer: str
-    citations: dict[str, dict[str, object]]
+    chunk_ids: list[str]
 
 
 class RedisSemanticCache:
@@ -97,16 +97,16 @@ class RedisSemanticCache:
         )
 
         answer = field_map.get("response", b"").decode()
-        citations_raw = field_map.get("citations", b"{}").decode()
-        citations = json.loads(citations_raw)
-        return SemanticCacheHit(answer=answer, citations=citations)
+        chunk_ids_raw = field_map.get("chunk_ids", b"[]").decode()
+        chunk_ids = json.loads(chunk_ids_raw)
+        return SemanticCacheHit(answer=answer, chunk_ids=chunk_ids)
 
     async def set(
         self,
         *,
         query: str,
         answer: str,
-        citations: dict[str, dict[str, object]],
+        chunk_ids: list[str],
         document_ids: list[str] | None = None,
     ) -> None:
         vector = await self._embed_query(query)
@@ -122,7 +122,7 @@ class RedisSemanticCache:
             mapping={
                 "query": query,
                 "response": answer,
-                "citations": json.dumps(citations),
+                "chunk_ids": json.dumps(chunk_ids),
                 "question_embedding": vector,
                 "document_ids_hash": doc_hash,
                 "created_at": str(int(time())),
@@ -169,7 +169,7 @@ class RedisSemanticCache:
                     "TEXT",
                     "response",
                     "TEXT",
-                    "citations",
+                    "chunk_ids",
                     "TEXT",
                     "document_ids_hash",
                     "TAG",
