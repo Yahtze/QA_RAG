@@ -50,15 +50,15 @@ class QdrantSemanticChunkSearch:
                     ),
                 ]
             )
-            points = await self.client.search(
+            response = await self.client.query_points(
                 collection_name=self.settings.QDRANT_COLLECTION_NAME,
-                query_vector=vector,
+                query=vector,
                 query_filter=flt,
                 limit=top_k,
             )
             return [
                 RankedChunkHit(chunk_id=UUID(str(point.id)), rank=i, score=float(point.score))
-                for i, point in enumerate(points, start=1)
+                for i, point in enumerate(response.points, start=1)
             ]
         except Exception as exc:  # pragma: no cover
             raise SemanticSearchUnavailable(str(exc)) from exc

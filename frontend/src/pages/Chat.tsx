@@ -5,12 +5,10 @@ import { ManageActiveDocumentsDialog } from '@/components/chat/ManageActiveDocum
 import { DocumentList } from '@/components/documents/DocumentList'
 import { UploadPanel } from '@/components/documents/UploadPanel'
 import { AppShell } from '@/components/layout/AppShell'
-import { SimulationControls } from '@/components/layout/SimulationControls'
 import { Separator } from '@/components/ui/separator'
 import { ConversationProvider, useConversation } from '@/store/ConversationContext'
 import { DocumentPipelineProvider, useDocumentPipeline } from '@/store/DocumentPipelineContext'
 import { ActiveConversationScopeProvider } from '@/store/ActiveConversationScopeContext'
-import { SimulationProfileProvider } from '@/store/SimulationProfileContext'
 
 function ChatBody() {
   const { documents } = useDocumentPipeline()
@@ -25,7 +23,6 @@ function ChatBody() {
           <ChatThread />
           <Separator />
           <ChatInput />
-          <SimulationControls />
         </div>
       }
       right={<CitationPanel />}
@@ -47,10 +44,8 @@ function ScopedConversation() {
 
 export default function Chat() {
   return (
-    <SimulationProfileProvider>
-      <DocumentPipelineProvider>
-        <ScopedConversation />
-      </DocumentPipelineProvider>
-    </SimulationProfileProvider>
+    <DocumentPipelineProvider>
+      <ScopedConversation />
+    </DocumentPipelineProvider>
   )
 }

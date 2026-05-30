@@ -1,4 +1,4 @@
-export type DocumentStatus = 'uploading' | 'processing' | 'ready' | 'failed'
+export type DocumentStatus = 'pending' | 'uploading' | 'processing' | 'ready' | 'failed'
 export type MessageRole = 'user' | 'assistant'
 export type MessageStatus = 'sent' | 'loading' | 'failed'
 

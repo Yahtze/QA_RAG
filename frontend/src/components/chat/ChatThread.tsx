@@ -7,7 +7,7 @@ export function ChatThread() {
   return (
     <ScrollArea className="h-[58vh] pr-4">
       <div className="space-y-5">
-        {conversation.messages.map((message) => <MessageBubble key={message.id} message={message} onRetry={() => void conversation.retry(message.id)} />)}
+        {conversation.messages.map((message) => <MessageBubble key={message.id} message={message} onRetry={() => void conversation.retry(message.id)} onActivateCitation={conversation.activateCitationByLabel} />)}
       </div>
     </ScrollArea>
   )

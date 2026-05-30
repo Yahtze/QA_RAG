@@ -10,9 +10,11 @@ interface ConversationValue {
   conversationId: string | null
   messages: Message[]
   latestCitations: Citation[]
+  activeCitationId: string | null
   isSending: boolean
   send: (query: string) => Promise<void>
   retry: (messageId: string) => Promise<void>
+  activateCitationByLabel: (label: string) => void
 }
 
 const ConversationContext = createContext<ConversationValue | null>(null)
@@ -29,6 +31,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     },
   ])
   const [latestCitations, setLatestCitations] = useState<Citation[]>([])
+  const [activeCitationId, setActiveCitationId] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversationDocumentId, setConversationDocumentId] = useState<string | null>(null)
@@ -95,6 +98,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
             snippet: source.snippet,
           }))
           setLatestCitations(citations)
+          setActiveCitationId(citations[0]?.id ?? null)
           setMessages((current) =>
             current.map((message) =>
               message.id === loadingId ? { ...message, citations } : message,
@@ -157,16 +161,23 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     await send(originalQuery)
   }
 
+  function activateCitationByLabel(label: string) {
+    const match = latestCitations.find((citation) => citation.label === label)
+    if (match) setActiveCitationId(match.id)
+  }
+
   const value = useMemo(
     () => ({
       conversationId,
       messages,
       latestCitations,
+      activeCitationId,
       isSending,
       send,
       retry,
+      activateCitationByLabel,
     }),
-    [conversationId, messages, latestCitations, isSending, activeDocument],
+    [conversationId, messages, latestCitations, activeCitationId, isSending, activeDocument],
   )
 
   return (

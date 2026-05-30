@@ -9,6 +9,10 @@ export function setAuthTokenProvider(
   authTokenProvider = provider
 }
 
+export function getAuthToken(): string | null {
+  return authTokenProvider ? authTokenProvider() : null
+}
+
 export class ApiError extends Error {
   status: number
   detail?: unknown

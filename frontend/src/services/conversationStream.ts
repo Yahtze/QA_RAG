@@ -1,14 +1,11 @@
 import type { CitationSource, ConversationStreamEvent } from '@/types'
+import { getAuthToken } from './apiClient'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 
 function authHeaders(): HeadersInit {
-  try {
-    const token = globalThis.localStorage?.getItem('qa_rag_token')
-    return token ? { Authorization: `Bearer ${token}` } : {}
-  } catch {
-    return {}
-  }
+  const token = getAuthToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 async function apiError(response: Response): Promise<Error> {

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { UploadCloud } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useDocumentPipeline } from '@/store/DocumentPipelineContext'
@@ -21,7 +21,7 @@ export function UploadPanel() {
 
   return (
     <Card className="border-border/70 bg-card/70">
-      <CardHeader><CardTitle className="flex items-center gap-2 text-base"><UploadCloud className="size-4 text-primary" />Upload document</CardTitle><CardDescription>Fake upload pipeline with processing states.</CardDescription></CardHeader>
+      <CardHeader><CardTitle className="flex items-center gap-2 text-base"><UploadCloud className="size-4 text-primary" />Upload Document</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <Label htmlFor="document-upload">Document file</Label>
         <Input id="document-upload" type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
