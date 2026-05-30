@@ -29,6 +29,28 @@ vi.mock('@/services/documentService', () => ({
       summary: 'Document ready for questions.',
     }),
   ),
+  uploadDocumentsBatch: vi.fn().mockResolvedValue({
+    total: 1,
+    accepted: 1,
+    failed: 0,
+    results: [
+      {
+        filename: 'batch.pdf',
+        status: 'accepted' as const,
+        document: {
+          id: 'doc-batch',
+          name: 'batch.pdf',
+          type: 'application/pdf',
+          sizeLabel: '5 KB',
+          uploadedAt: 'Just now',
+          status: 'ready' as const,
+          progress: 100,
+          summary: 'Document ready for questions.',
+        },
+        error: null,
+      },
+    ],
+  }),
   deleteDocument: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -71,6 +93,19 @@ describe('DocumentPipelineContext', () => {
     })
 
     expect(result.current.activeDocument?.name).toBe('selectable.pdf')
+  })
+
+  it('removes a document from list', async () => {
+    const { result } = renderHook(() => useDocumentPipeline(), {
+      wrapper: DocumentPipelineProvider,
+    })
+    await waitFor(() => expect(result.current.documents).toHaveLength(1))
+
+    await act(async () => {
+      await result.current.remove('doc-1')
+    })
+
+    expect(result.current.documents).toHaveLength(0)
   })
 
   it('retry is a no-op and does not throw', async () => {

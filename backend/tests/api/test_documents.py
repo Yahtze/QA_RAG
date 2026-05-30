@@ -87,6 +87,81 @@ async def test_upload_route_maps_enqueue_failure_to_500(async_client, auth_heade
     assert r.json()["detail"] == "Failed to enqueue ingestion task."
 
 
+@pytest.mark.asyncio
+async def test_upload_batch_mixed_valid_invalid_returns_207(async_client, auth_headers, monkeypatch):
+    from app.services.ingestion_queue import FakeIngestionQueue
+
+    monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: FakeIngestionQueue())
+
+    files = [
+        ("files", ("good-1.txt", b"hello", "text/plain")),
+        ("files", ("bad-1.exe", b"abc", "application/x-msdownload")),
+        ("files", ("good-2.md", b"# ok", "text/markdown")),
+    ]
+
+    r = await async_client.post("/api/v1/documents/upload-batch", files=files, headers=auth_headers)
+
+    assert r.status_code == 207
+    body = r.json()
+    assert body["total"] == 3
+    assert body["accepted"] == 2
+    assert body["failed"] == 1
+    assert [item["status"] for item in body["results"]] == ["accepted", "failed", "accepted"]
+
+
+@pytest.mark.asyncio
+async def test_upload_batch_all_valid_returns_207(async_client, auth_headers, monkeypatch):
+    from app.services.ingestion_queue import FakeIngestionQueue
+
+    monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: FakeIngestionQueue())
+
+    files = [
+        ("files", ("one.txt", b"hello", "text/plain")),
+        ("files", ("two.md", b"# world", "text/markdown")),
+    ]
+
+    r = await async_client.post("/api/v1/documents/upload-batch", files=files, headers=auth_headers)
+
+    assert r.status_code == 207
+    body = r.json()
+    assert body["total"] == 2
+    assert body["accepted"] == 2
+    assert body["failed"] == 0
+    assert all(item["status"] == "accepted" for item in body["results"])
+
+
+@pytest.mark.asyncio
+async def test_upload_batch_all_invalid_returns_207(async_client, auth_headers, monkeypatch):
+    from app.services.ingestion_queue import FakeIngestionQueue
+
+    monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: FakeIngestionQueue())
+
+    files = [
+        ("files", ("bad-1.exe", b"abc", "application/x-msdownload")),
+        ("files", ("bad-2.exe", b"def", "application/x-msdownload")),
+    ]
+
+    r = await async_client.post("/api/v1/documents/upload-batch", files=files, headers=auth_headers)
+
+    assert r.status_code == 207
+    body = r.json()
+    assert body["total"] == 2
+    assert body["accepted"] == 0
+    assert body["failed"] == 2
+    assert all(item["status"] == "failed" for item in body["results"])
+
+
+@pytest.mark.asyncio
+async def test_upload_batch_empty_list_returns_422(async_client, auth_headers, monkeypatch):
+    from app.services.ingestion_queue import FakeIngestionQueue
+
+    monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: FakeIngestionQueue())
+
+    r = await async_client.post("/api/v1/documents/upload-batch", files=[], headers=auth_headers)
+
+    assert r.status_code == 422
+
+
 def test_upload_route_does_not_import_worker_or_celery():
     import inspect
     import app.api.v1.documents as documents

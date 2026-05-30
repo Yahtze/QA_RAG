@@ -1,12 +1,18 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from starlette.status import HTTP_207_MULTI_STATUS
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_settings_dep
 from app.core.pagination import CursorPage
 from app.db.session import get_db_session
-from app.schemas.document import DeletedDocumentOut, DocumentOut
+from app.schemas.document import (
+    BatchUploadItemOut,
+    BatchUploadSummaryOut,
+    DeletedDocumentOut,
+    DocumentOut,
+)
 from app.services.async_document_upload import AsyncDocumentUpload, ENQUEUE_FAILURE_MESSAGE
 from app.services.document_pipeline import DocumentPipelineService, ForbiddenError, NotFoundError
 from app.services.ingestion_factory import build_ingestion_service
@@ -22,6 +28,23 @@ from app.services.vector_store import QdrantVectorStore
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
+async def _upload_single_document(*, file: UploadFile, user, session: AsyncSession, settings):
+    if settings.USE_ASYNC_INGESTION:
+        return await AsyncDocumentUpload(
+            session=session,
+            settings=settings,
+            queue=CeleryIngestionQueue(settings=settings),
+        ).upload(user=user, upload_file=file)
+    storage = LocalStorageService(settings)
+    service = DocumentPipelineService(
+        session,
+        storage,
+        ingestion_service=build_ingestion_service(session=session, settings=settings),
+        vector_store=QdrantVectorStore(settings),
+    )
+    return await service.upload(user=user, upload_file=file)
+
+
 @router.post("/upload", response_model=DocumentOut, status_code=201)
 async def upload(
     file: UploadFile = File(...),
@@ -30,26 +53,74 @@ async def upload(
     settings=Depends(get_settings_dep),
 ):
     try:
-        if settings.USE_ASYNC_INGESTION:
-            return await AsyncDocumentUpload(
-                session=session,
-                settings=settings,
-                queue=CeleryIngestionQueue(settings=settings),
-            ).upload(user=user, upload_file=file)
-        storage = LocalStorageService(settings)
-        service = DocumentPipelineService(
-            session,
-            storage,
-            ingestion_service=build_ingestion_service(session=session, settings=settings),
-            vector_store=QdrantVectorStore(settings),
-        )
-        return await service.upload(user=user, upload_file=file)
+        return await _upload_single_document(file=file, user=user, session=session, settings=settings)
     except EnqueueIngestionError:
         raise HTTPException(status_code=500, detail=ENQUEUE_FAILURE_MESSAGE)
     except UploadTooLargeError:
         raise HTTPException(status_code=413, detail="Upload too large")
     except (DisallowedContentTypeError, InvalidPdfError):
         raise HTTPException(status_code=422, detail="Invalid file")
+
+
+@router.post("/upload-batch", response_model=BatchUploadSummaryOut, status_code=HTTP_207_MULTI_STATUS)
+async def upload_batch(
+    files: list[UploadFile] = File(...),
+    user=Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+    settings=Depends(get_settings_dep),
+):
+    if not files:
+        raise HTTPException(status_code=422, detail="At least one file is required")
+
+    results: list[BatchUploadItemOut] = []
+    accepted = 0
+    failed = 0
+
+    for file in files:
+        try:
+            # Per-file transaction boundary: upload persists+commits before enqueue.
+            # This guarantees already-committed files are not rolled back by later failures.
+            document = await _upload_single_document(
+                file=file, user=user, session=session, settings=settings
+            )
+            results.append(
+                BatchUploadItemOut(
+                    filename=file.filename or "upload.bin",
+                    status="accepted",
+                    document=document,
+                    error=None,
+                )
+            )
+            accepted += 1
+        except EnqueueIngestionError:
+            results.append(
+                BatchUploadItemOut(
+                    filename=file.filename or "upload.bin",
+                    status="failed",
+                    error=ENQUEUE_FAILURE_MESSAGE,
+                )
+            )
+            failed += 1
+        except UploadTooLargeError:
+            results.append(
+                BatchUploadItemOut(
+                    filename=file.filename or "upload.bin",
+                    status="failed",
+                    error="Upload too large",
+                )
+            )
+            failed += 1
+        except (DisallowedContentTypeError, InvalidPdfError):
+            results.append(
+                BatchUploadItemOut(
+                    filename=file.filename or "upload.bin",
+                    status="failed",
+                    error="Invalid file",
+                )
+            )
+            failed += 1
+
+    return BatchUploadSummaryOut(total=len(files), accepted=accepted, failed=failed, results=results)
 
 
 @router.get("", response_model=CursorPage[DocumentOut])

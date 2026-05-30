@@ -55,7 +55,7 @@ describe('documentService', () => {
 
   it('lists documents from backend', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify([baseDoc]), { status: 200 }),
+      new Response(JSON.stringify({ items: [baseDoc], page_info: { next_cursor: null, has_more: false } }), { status: 200 }),
     )
 
     const docs = await listDocuments()

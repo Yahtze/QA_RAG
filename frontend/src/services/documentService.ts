@@ -52,6 +52,34 @@ export async function listDocuments(): Promise<RagDocument[]> {
   return (page.items ?? []).map(mapDocument)
 }
 
+export interface BatchUploadResult {
+  filename: string
+  status: 'accepted' | 'failed'
+  document: RagDocument | null
+  error: string | null
+}
+
+interface BatchUploadItemOut {
+  filename: string
+  status: 'accepted' | 'failed'
+  document: DocumentOut | null
+  error: string | null
+}
+
+interface BatchUploadSummaryOut {
+  total: number
+  accepted: number
+  failed: number
+  results: BatchUploadItemOut[]
+}
+
+export interface BatchUploadSummary {
+  total: number
+  accepted: number
+  failed: number
+  results: BatchUploadResult[]
+}
+
 export async function uploadDocument(file: File): Promise<RagDocument> {
   const formData = new FormData()
   formData.append('file', file)
@@ -60,6 +88,27 @@ export async function uploadDocument(file: File): Promise<RagDocument> {
     body: formData,
   })
   return mapDocument(doc)
+}
+
+export async function uploadDocumentsBatch(files: File[]): Promise<BatchUploadSummary> {
+  const formData = new FormData()
+  files.forEach((file) => formData.append('files', file))
+  const summary = await apiRequest<BatchUploadSummaryOut>('/documents/upload-batch', {
+    method: 'POST',
+    body: formData,
+  })
+
+  return {
+    total: summary.total,
+    accepted: summary.accepted,
+    failed: summary.failed,
+    results: summary.results.map((item) => ({
+      filename: item.filename,
+      status: item.status,
+      document: item.document ? mapDocument(item.document) : null,
+      error: item.error,
+    })),
+  }
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
