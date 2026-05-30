@@ -64,7 +64,7 @@ class RedisSemanticCache:
             "3",
             "distance",
             "response",
-            "citations",
+            "chunk_ids",
             "SORTBY",
             "distance",
             "ASC",

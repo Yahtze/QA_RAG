@@ -1,8 +1,24 @@
+import re
+import unicodedata
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+MAX_USER_QUERY_CHARS = 4000
+
+
+def normalize_user_query(content: str) -> str:
+    trimmed = content.strip()
+    collapsed = re.sub(r"\s+", " ", trimmed)
+    without_controls = "".join(
+        ch
+        for ch in collapsed
+        if ch in {"\n", "\t"} or not unicodedata.category(ch).startswith("C")
+    )
+    collapsed_clean = re.sub(r"\s+", " ", without_controls).strip()
+    return unicodedata.normalize("NFC", collapsed_clean)
 
 
 class ConversationCreate(BaseModel):
@@ -24,7 +40,21 @@ class ConversationScopeUpdate(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    content: str = Field(min_length=1)
+    content: str
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_and_normalize_content(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("content must be a string")
+        normalized = normalize_user_query(value)
+        if not normalized:
+            raise ValueError("content cannot be empty after normalization")
+        if len(normalized) > MAX_USER_QUERY_CHARS:
+            raise ValueError(
+                f"content exceeds max length of {MAX_USER_QUERY_CHARS} characters"
+            )
+        return normalized
 
 
 class CitationOut(BaseModel):
