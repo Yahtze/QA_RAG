@@ -2,7 +2,7 @@ from uuid import uuid4
 
 from app.services.citation_mapper import citation_rows, citations_event_map
 from app.services.context_packer import pack_context
-from app.services.prompt_builder import build_grounded_messages
+from app.services.prompt_builder import HistoryTurn, build_grounded_messages
 from app.services.retrieval_types import RetrievalResult, RetrievedChunk
 
 
@@ -45,13 +45,15 @@ def test_prompt_contains_strict_grounding_rules():
         context_text=packed.context_text,
     )
     system = messages[0]["content"]
-    assert "ONLY the context chunks" in system
-    assert "Never use knowledge outside" in system
+    assert "strictly over context chunks" in system
+    assert "Never use outside knowledge" in system
     assert (
         "I don't have enough information in the provided documents to answer this."
         in system
     )
-    assert messages[1] == {"role": "user", "content": "When are refunds paid?"}
+    user_msg = messages[1]["content"]
+    assert "When are refunds paid?" in user_msg
+    assert "Refunds take five days." in user_msg
 
 
 def test_citation_mapper_uses_retrieval_metadata():
@@ -63,3 +65,30 @@ def test_citation_mapper_uses_retrieval_metadata():
     rows = citation_rows(message_id=uuid4(), chunks=[retrieved])
     assert rows[0].label == "1"
     assert rows[0].filename == "guide.pdf"
+
+
+def test_history_turns_are_chained():
+    history = [
+        HistoryTurn(
+            question="What is the refund policy?",
+            context_text="[1] guide.pdf p.1\nRefunds take five days.",
+            answer="Refunds take five days [1].",
+        ),
+    ]
+    messages = build_grounded_messages(
+        question="And exchanges?",
+        context_text="[1] guide.pdf p.2\nExchanges take 10 days.",
+        history=history,
+    )
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    assert "What is the refund policy?" in messages[1]["content"]
+    assert "Refunds take five days." in messages[1]["content"]
+    assert messages[2] == {
+        "role": "assistant",
+        "content": "Refunds take five days [1].",
+    }
+    assert messages[3]["role"] == "user"
+    assert "And exchanges?" in messages[3]["content"]
+    assert "Exchanges take 10 days." in messages[3]["content"]
+    assert len(messages) == 4

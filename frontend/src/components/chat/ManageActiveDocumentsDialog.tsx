@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useActiveConversationScope } from '@/store/ActiveConversationScopeContext'
+import { useConversation } from '@/store/ConversationContext'
 import type { RagDocument } from '@/types'
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 
 export function ManageActiveDocumentsDialog({ documents, conversationId }: Props) {
   const scope = useActiveConversationScope()
+  const conversation = useConversation()
   const [open, setOpen] = useState(false)
 
   return (
@@ -68,10 +70,11 @@ export function ManageActiveDocumentsDialog({ documents, conversationId }: Props
                 Cancel
               </Button>
               <Button
-                disabled={!conversationId}
                 onClick={async () => {
-                  if (!conversationId) return
-                  await scope.save(conversationId)
+                  if (conversationId) {
+                    await scope.save(conversationId)
+                    await conversation.updateActiveDocumentIds(scope.activeDocumentIds)
+                  }
                   setOpen(false)
                 }}
               >

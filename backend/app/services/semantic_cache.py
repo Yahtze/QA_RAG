@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from array import array
 from dataclasses import dataclass
 from hashlib import sha256
@@ -9,6 +10,8 @@ from uuid import uuid4
 import redis.asyncio as redis
 
 from app.core.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -71,7 +74,25 @@ class RedisSemanticCache:
         distance = float(field_map.get("distance", b"1"))
         max_distance = 1 - self.settings.SEMANTIC_CACHE_MIN_SIMILARITY
         if distance > max_distance:
+            logger.info(
+                "semantic_cache_lookup",
+                extra={
+                    "hit": False,
+                    "reason": "threshold_exceeded",
+                    "distance": distance,
+                    "max_distance": max_distance,
+                },
+            )
             return None
+
+        logger.info(
+            "semantic_cache_lookup",
+            extra={
+                "hit": True,
+                "distance": distance,
+                "max_distance": max_distance,
+            },
+        )
 
         answer = field_map.get("response", b"").decode()
         citations_raw = field_map.get("citations", b"{}").decode()
@@ -103,6 +124,13 @@ class RedisSemanticCache:
             },
         )
         await self.client.expire(key, self.settings.SEMANTIC_CACHE_TTL_SECONDS)
+        logger.info(
+            "semantic_cache_write",
+            extra={
+                "key": key,
+                "ttl_seconds": self.settings.SEMANTIC_CACHE_TTL_SECONDS,
+            },
+        )
 
     async def _embed_query(self, query: str) -> bytes | None:
         vectors = await self.embeddings.embed_texts([query])

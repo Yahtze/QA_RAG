@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -21,6 +22,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings_dep()
+    logging.getLogger("app").setLevel(settings.app_log_level_normalized)
     app = FastAPI(title="QA RAG Backend", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,

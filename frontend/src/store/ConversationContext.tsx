@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
-import { createConversation as createConv, listConversations, listMessages } from '@/services/chatService'
+import { createConversation as createConv, listConversations, listMessages, updateActiveDocuments } from '@/services/chatService'
 import { streamConversationMessage } from '@/services/conversationStream'
 import type { Citation, Message } from '@/types'
 
 import { useDocumentPipeline } from './DocumentPipelineContext'
+import { useActiveConversationScope } from './ActiveConversationScopeContext'
 
 interface ConversationValue {
   conversationId: string | null
@@ -16,6 +17,7 @@ interface ConversationValue {
   retry: (messageId: string) => Promise<void>
   activateCitationByLabel: (label: string) => void
   newChat: () => void
+  updateActiveDocumentIds: (ids: string[]) => Promise<void>
 }
 
 function extractCitationLabels(content: string): Set<string> {
@@ -43,7 +45,8 @@ function initialMessages(): Message[] {
 }
 
 export function ConversationProvider({ children }: { children: ReactNode }) {
-  const { activeDocument } = useDocumentPipeline()
+  const { activeDocument, documents: pipelineDocuments } = useDocumentPipeline()
+  const scope = useActiveConversationScope()
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [latestCitations, setLatestCitations] = useState<Citation[]>([])
   const [activeCitationId, setActiveCitationId] = useState<string | null>(null)
@@ -56,14 +59,15 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     if (conversationId && conversationDocumentId === documentId) {
       return conversationId
     }
-    const id = await createConv(documentId)
+    const id = await createConv(documentId, scope.activeDocumentIds)
     setConversationId(id)
     setConversationDocumentId(documentId)
     return id
   }
 
   async function send(query: string) {
-    if (!activeDocument || !query.trim() || isHydrating) return
+    const primaryDocument = scope.activeDocuments[0] ?? activeDocument
+    if (!primaryDocument || !query.trim() || isHydrating) return
     const originalQuery = query.trim()
     const loadingId = `assistant-${Date.now()}`
     setIsSending(true)
@@ -86,7 +90,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     ])
 
     try {
-      const conversationId = await ensureConversation(activeDocument.id)
+      const conversationId = await ensureConversation(primaryDocument.id)
       for await (const event of streamConversationMessage(conversationId, originalQuery)) {
         if (event.type === 'token') {
           setMessages((current) =>
@@ -246,6 +250,11 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     setActiveCitationId(null)
   }
 
+  async function updateActiveDocumentIds(ids: string[]) {
+    if (!conversationId) return
+    await updateActiveDocuments(conversationId, ids)
+  }
+
   const value = useMemo(
     () => ({
       conversationId,
@@ -257,8 +266,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       retry,
       activateCitationByLabel,
       newChat,
+      updateActiveDocumentIds,
     }),
-    [conversationId, messages, latestCitations, activeCitationId, isSending, isHydrating, activeDocument],
+    [conversationId, messages, latestCitations, activeCitationId, isSending, isHydrating, activeDocument, scope.activeDocumentIds],
   )
 
   return (

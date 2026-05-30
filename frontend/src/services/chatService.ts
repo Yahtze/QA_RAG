@@ -40,12 +40,16 @@ interface CursorPage<T> {
   page_info: { next_cursor: string | null; has_more: boolean }
 }
 
-export async function createConversation(documentId: string): Promise<string> {
+export async function createConversation(
+  documentId: string,
+  activeDocumentIds?: string[],
+): Promise<string> {
+  const ids = activeDocumentIds && activeDocumentIds.length > 0 ? activeDocumentIds : [documentId]
   const response = await apiRequest<ConversationOut>('/conversations', {
     method: 'POST',
     body: JSON.stringify({
       document_id: documentId,
-      active_document_ids: [documentId],
+      active_document_ids: ids,
     }),
   })
   return response.id

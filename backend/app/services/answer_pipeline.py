@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Literal, Protocol
@@ -6,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings
 from app.models import Conversation, Message, MessageRole, User
@@ -13,9 +15,11 @@ from app.services.citation_mapper import citation_rows, citations_event_map
 from app.services.context_packer import pack_context
 from app.services.conversation_errors import ForbiddenError, NotFoundError
 from app.services.conversation_scope import ConversationScopeService
-from app.services.prompt_builder import build_grounded_messages
+from app.services.prompt_builder import HistoryTurn, build_grounded_messages
 from app.services.retrieval_types import RetrievalResult
 from app.services.semantic_cache import RedisSemanticCache
+
+logger = logging.getLogger(__name__)
 
 ABSTENTION = (
     "I don't have enough information in the active documents to answer this yet. "
@@ -128,8 +132,11 @@ class AnswerPipeline:
             final_top_k=self.settings.RETRIEVAL_FINAL_TOP_K,
             max_chars=self.settings.CONTEXT_MAX_CHARS,
         )
+        history = await self._build_history(conversation_id)
         messages = build_grounded_messages(
-            question=content, context_text=packed.context_text
+            question=content,
+            context_text=packed.context_text,
+            history=history,
         )
 
         answer_parts: list[str] = []
@@ -176,13 +183,21 @@ class AnswerPipeline:
     async def _semantic_cache_get(self, query: str):
         if not self.settings.SEMANTIC_CACHE_ENABLED or self.semantic_cache is None:
             return None
-        timeout_s = self.settings.SEMANTIC_CACHE_TIMEOUT_MS / 1000
         try:
-            return await asyncio.wait_for(
-                self.semantic_cache.get(query=query),
-                timeout=timeout_s,
+            hit = await self.semantic_cache.get(query=query)
+            if hit is None:
+                logger.info("semantic_cache_pipeline_lookup", extra={"hit": False})
+            else:
+                logger.info("semantic_cache_pipeline_lookup", extra={"hit": True})
+            return hit
+        except TimeoutError:
+            logger.warning("semantic_cache_pipeline_lookup_fallback reason=timeout")
+            return None
+        except Exception as exc:
+            logger.warning(
+                "semantic_cache_pipeline_lookup_fallback reason=error error=%s",
+                str(exc),
             )
-        except Exception:
             return None
 
     def _semantic_cache_set_async(
@@ -196,17 +211,59 @@ class AnswerPipeline:
             return
 
         async def _write() -> None:
-            timeout_s = self.settings.SEMANTIC_CACHE_TIMEOUT_MS / 1000
             try:
-                await asyncio.wait_for(
-                    self.semantic_cache.set(
-                        query=query,
-                        answer=answer,
-                        citations=citations,
-                    ),
-                    timeout=timeout_s,
+                await self.semantic_cache.set(
+                    query=query,
+                    answer=answer,
+                    citations=citations,
                 )
-            except Exception:
+                logger.info("semantic_cache_pipeline_write", extra={"status": "ok"})
+            except TimeoutError:
+                logger.warning("semantic_cache_pipeline_write status=timeout")
+                return
+            except Exception as exc:
+                logger.warning(
+                    "semantic_cache_pipeline_write status=error error=%s",
+                    str(exc),
+                )
                 return
 
         asyncio.create_task(_write())
+
+    async def _build_history(self, conversation_id: UUID) -> list[HistoryTurn]:
+        result = await self.session.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .where(Message.error_message.is_(None))
+            .options(selectinload(Message.citations))
+            .order_by(Message.created_at, Message.id)
+        )
+        messages = result.scalars().all()
+
+        turns: list[HistoryTurn] = []
+        pending_question: str | None = None
+
+        for msg in messages:
+            if msg.role == MessageRole.USER.value:
+                pending_question = msg.content
+            elif (
+                msg.role == MessageRole.ASSISTANT.value and pending_question is not None
+            ):
+                ctx_parts: list[str] = []
+                for citation in msg.citations:
+                    page = f" p.{citation.page_number}" if citation.page_number else ""
+                    label = citation.label or "?"
+                    ctx_parts.append(
+                        f"[{label}] {citation.filename}{page}\n{citation.chunk_text.strip()}"
+                    )
+                context_text = "\n\n".join(ctx_parts) if ctx_parts else "(no context)"
+                turns.append(
+                    HistoryTurn(
+                        question=pending_question,
+                        context_text=context_text,
+                        answer=msg.content,
+                    )
+                )
+                pending_question = None
+
+        return turns

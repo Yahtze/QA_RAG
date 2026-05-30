@@ -26,8 +26,7 @@ class LexicalRetriever:
             self.session.bind.dialect.name if self.session.bind is not None else ""
         )
         if dialect == "postgresql":
-            sql = text(
-                """
+            sql = text("""
                 SELECT dc.id,
                        ts_rank_cd(
                            to_tsvector('english', dc.text),
@@ -41,8 +40,7 @@ class LexicalRetriever:
                   AND to_tsvector('english', dc.text) @@ plainto_tsquery('english', :query)
                 ORDER BY rank_score DESC, dc.id
                 LIMIT :top_k
-                """
-            ).bindparams(bindparam("document_ids"))
+                """).bindparams(bindparam("document_ids"))
             rows = (
                 await self.session.execute(
                     sql,
