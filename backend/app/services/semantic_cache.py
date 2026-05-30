@@ -37,13 +37,16 @@ class RedisSemanticCache:
         self._index_ready = False
         self._ensure_lock = asyncio.Lock()
 
-    async def get(self, *, query: str) -> SemanticCacheHit | None:
+    async def get(self, *, query: str, document_ids: list[str] | None = None) -> SemanticCacheHit | None:
         vector = await self._embed_query(query)
         if vector is None:
             return None
         await self._ensure_index()
 
-        query_str = "*=>[KNN 1 @question_embedding $vec AS distance]"
+        # Filter by document set hash
+        doc_hash = self._hash_document_ids(document_ids)
+        filter_str = f"@document_ids_hash:{{{doc_hash}}}"
+        query_str = f"{filter_str}=>[KNN 1 @question_embedding $vec AS distance]"
         result = await self.client.execute_command(
             "FT.SEARCH",
             self.index_name,
@@ -105,6 +108,7 @@ class RedisSemanticCache:
         query: str,
         answer: str,
         citations: dict[str, dict[str, object]],
+        document_ids: list[str] | None = None,
     ) -> None:
         vector = await self._embed_query(query)
         if vector is None:
@@ -112,7 +116,8 @@ class RedisSemanticCache:
         await self._ensure_index()
 
         query_hash = sha256(query.encode()).hexdigest()[:12]
-        key = f"{self.key_prefix}{query_hash}:{uuid4().hex}"
+        doc_hash = self._hash_document_ids(document_ids)
+        key = f"{self.key_prefix}{doc_hash}:{query_hash}:{uuid4().hex}"
         await self.client.hset(
             key,
             mapping={
@@ -120,6 +125,7 @@ class RedisSemanticCache:
                 "response": answer,
                 "citations": json.dumps(citations),
                 "question_embedding": vector,
+                "document_ids_hash": doc_hash,
                 "created_at": str(int(time())),
             },
         )
@@ -131,6 +137,13 @@ class RedisSemanticCache:
                 "ttl_seconds": self.settings.SEMANTIC_CACHE_TTL_SECONDS,
             },
         )
+
+    def _hash_document_ids(self, document_ids: list[str] | None) -> str:
+        """Hash sorted document IDs for cache scoping."""
+        if not document_ids:
+            return "all"
+        sorted_ids = ":".join(sorted(document_ids))
+        return sha256(sorted_ids.encode()).hexdigest()[:10]
 
     async def _embed_query(self, query: str) -> bytes | None:
         vectors = await self.embeddings.embed_texts([query])
@@ -161,6 +174,8 @@ class RedisSemanticCache:
                     "TEXT",
                     "citations",
                     "TEXT",
+                    "document_ids_hash",
+                    "TAG",
                     "created_at",
                     "NUMERIC",
                     "question_embedding",

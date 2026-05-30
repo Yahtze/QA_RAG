@@ -87,7 +87,7 @@ class AnswerPipeline:
         self.session.add(user_message)
         await self.session.commit()
 
-        cache_hit = await self._semantic_cache_get(content)
+        cache_hit = await self._semantic_cache_get(content, document_ids=[str(d) for d in scope.active_document_ids])
         if cache_hit is not None:
             assistant = Message(
                 conversation_id=conversation_id,
@@ -175,16 +175,17 @@ class AnswerPipeline:
             query=content,
             answer="".join(answer_parts),
             citations=citation_map,
+            document_ids=[str(d) for d in scope.active_document_ids],
         )
 
         yield AnswerEvent(type="citations", map=citation_map)
         yield AnswerEvent(type="done")
 
-    async def _semantic_cache_get(self, query: str):
+    async def _semantic_cache_get(self, query: str, document_ids: list[str] | None = None):
         if not self.settings.SEMANTIC_CACHE_ENABLED or self.semantic_cache is None:
             return None
         try:
-            hit = await self.semantic_cache.get(query=query)
+            hit = await self.semantic_cache.get(query=query, document_ids=document_ids)
             if hit is None:
                 logger.info("semantic_cache_pipeline_lookup", extra={"hit": False})
             else:
@@ -206,6 +207,7 @@ class AnswerPipeline:
         query: str,
         answer: str,
         citations: dict[str, dict[str, object]],
+        document_ids: list[str] | None = None,
     ) -> None:
         if not self.settings.SEMANTIC_CACHE_ENABLED or self.semantic_cache is None:
             return
@@ -216,6 +218,7 @@ class AnswerPipeline:
                     query=query,
                     answer=answer,
                     citations=citations,
+                    document_ids=document_ids,
                 )
                 logger.info("semantic_cache_pipeline_write", extra={"status": "ok"})
             except TimeoutError:
