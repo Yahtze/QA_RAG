@@ -1,10 +1,19 @@
-import { LogOut } from 'lucide-react'
+import { LogOut, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { useActiveConversationScope } from '@/store/ActiveConversationScopeContext'
+import { useConversation } from '@/store/ConversationContext'
 import { useSession } from '@/store/SessionContext'
 
 export function TopBar() {
   const session = useSession()
+  const conversation = useConversation()
+  const scope = useActiveConversationScope()
+
+  function startNewChat() {
+    conversation.newChat()
+    scope.setActiveDocumentIds([])
+  }
   return (
     <header className="flex items-center justify-between border-b border-border/70 bg-card/50 px-6 py-4 backdrop-blur">
       <div>
@@ -12,6 +21,7 @@ export function TopBar() {
       </div>
       <div className="flex items-center gap-3">
         <span className="hidden text-sm text-muted-foreground sm:inline">{session.user?.email}</span>
+        <Button variant="outline" size="sm" onClick={startNewChat}><Plus className="mr-2 size-4" />New Chat</Button>
         <Separator orientation="vertical" className="h-6" />
         <Button variant="ghost" size="sm" onClick={session.logout}><LogOut className="mr-2 size-4" />Logout</Button>
       </div>

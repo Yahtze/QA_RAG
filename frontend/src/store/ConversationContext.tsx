@@ -15,6 +15,7 @@ interface ConversationValue {
   send: (query: string) => Promise<void>
   retry: (messageId: string) => Promise<void>
   activateCitationByLabel: (label: string) => void
+  newChat: () => void
 }
 
 function extractCitationLabels(content: string): Set<string> {
@@ -29,9 +30,8 @@ function extractCitationLabels(content: string): Set<string> {
 
 const ConversationContext = createContext<ConversationValue | null>(null)
 
-export function ConversationProvider({ children }: { children: ReactNode }) {
-  const { activeDocument } = useDocumentPipeline()
-  const [messages, setMessages] = useState<Message[]>([
+function initialMessages(): Message[] {
+  return [
     {
       id: 'assistant-welcome',
       role: 'assistant',
@@ -39,7 +39,12 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       status: 'sent',
       createdAt: 'Just now',
     },
-  ])
+  ]
+}
+
+export function ConversationProvider({ children }: { children: ReactNode }) {
+  const { activeDocument } = useDocumentPipeline()
+  const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [latestCitations, setLatestCitations] = useState<Citation[]>([])
   const [activeCitationId, setActiveCitationId] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
@@ -204,15 +209,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
           if (!cancelled) {
             setConversationId(null)
             setConversationDocumentId(null)
-            setMessages([
-              {
-                id: 'assistant-welcome',
-                role: 'assistant',
-                content: 'Select a ready document and ask a question. I will return a grounded answer with citations.',
-                status: 'sent',
-                createdAt: 'Just now',
-              },
-            ])
+            setMessages(initialMessages())
             setLatestCitations([])
             setActiveCitationId(null)
           }
@@ -223,15 +220,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setConversationId(latestForDocument.id)
           setConversationDocumentId(activeDocumentId)
-          setMessages(history.length > 0 ? history : [
-            {
-              id: 'assistant-welcome',
-              role: 'assistant',
-              content: 'Select a ready document and ask a question. I will return a grounded answer with citations.',
-              status: 'sent',
-              createdAt: 'Just now',
-            },
-          ])
+          setMessages(history.length > 0 ? history : initialMessages())
           const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant')
           setLatestCitations(lastAssistant?.citations ?? [])
           setActiveCitationId(lastAssistant?.citations?.[0]?.id ?? null)
@@ -249,6 +238,14 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     }
   }, [activeDocument?.id])
 
+  function newChat() {
+    setConversationId(null)
+    setConversationDocumentId(null)
+    setMessages(initialMessages())
+    setLatestCitations([])
+    setActiveCitationId(null)
+  }
+
   const value = useMemo(
     () => ({
       conversationId,
@@ -259,6 +256,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       send,
       retry,
       activateCitationByLabel,
+      newChat,
     }),
     [conversationId, messages, latestCitations, activeCitationId, isSending, isHydrating, activeDocument],
   )
