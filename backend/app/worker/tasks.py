@@ -46,12 +46,16 @@ async def run_ingestion(
     await engine.dispose()
 
 
-async def _mark_final_retry_failure_from_settings(document_id: UUID, exc: BaseException) -> None:
+async def _mark_final_retry_failure_from_settings(
+    document_id: UUID, exc: BaseException
+) -> None:
     settings = get_settings()
     engine = create_async_engine(settings.DATABASE_URL)
     Session = async_sessionmaker(engine, expire_on_commit=False)
     async with Session() as session:
-        await mark_final_retry_failure(session, document_id, exc, max_retries=MAX_RETRIES)
+        await mark_final_retry_failure(
+            session, document_id, exc, max_retries=MAX_RETRIES
+        )
     await engine.dispose()
 
 

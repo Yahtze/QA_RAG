@@ -1,7 +1,11 @@
 import pytest
 
 from app.models import Conversation, Document, DocumentStatus, User
-from app.services.conversation_errors import ForbiddenError, InvalidStateError, NotFoundError
+from app.services.conversation_errors import (
+    ForbiddenError,
+    InvalidStateError,
+    NotFoundError,
+)
 from app.services.conversation_scope import ConversationScopeService
 
 
@@ -13,7 +17,9 @@ async def make_user(db_session, email="u@example.com"):
     return user
 
 
-async def make_doc(db_session, user, filename="a.pdf", status=DocumentStatus.READY.value):
+async def make_doc(
+    db_session, user, filename="a.pdf", status=DocumentStatus.READY.value
+):
     doc = Document(
         user_id=user.id,
         filename=filename,
@@ -34,7 +40,9 @@ async def test_create_scope_defaults_to_document_id(db_session):
     doc = await make_doc(db_session, user)
     scope = ConversationScopeService(db_session)
 
-    conv = await scope.create_conversation(user=user, document_id=doc.id, active_document_ids=[])
+    conv = await scope.create_conversation(
+        user=user, document_id=doc.id, active_document_ids=[]
+    )
 
     assert conv.document_id == doc.id
     assert conv.active_document_ids == [str(doc.id)]
@@ -47,7 +55,9 @@ async def test_update_active_docs_rejects_wrong_user_and_not_ready(db_session):
     ready = await make_doc(db_session, user, "ready.pdf")
     failed = await make_doc(db_session, user, "failed.pdf", DocumentStatus.FAILED.value)
     wrong_user = await make_doc(db_session, other, "wrong.pdf")
-    conv = Conversation(user_id=user.id, document_id=ready.id, active_document_ids=[str(ready.id)])
+    conv = Conversation(
+        user_id=user.id, document_id=ready.id, active_document_ids=[str(ready.id)]
+    )
     db_session.add(conv)
     await db_session.commit()
     await db_session.refresh(conv)
@@ -86,7 +96,9 @@ async def test_scope_ownership_validation(db_session):
     owner = await make_user(db_session, "owner2@example.com")
     other = await make_user(db_session, "other2@example.com")
     doc = await make_doc(db_session, owner)
-    conv = Conversation(user_id=owner.id, document_id=doc.id, active_document_ids=[str(doc.id)])
+    conv = Conversation(
+        user_id=owner.id, document_id=doc.id, active_document_ids=[str(doc.id)]
+    )
     db_session.add(conv)
     await db_session.commit()
     scope = ConversationScopeService(db_session)

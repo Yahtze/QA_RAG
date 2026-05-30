@@ -7,7 +7,9 @@ from app.services.storage import LocalStorageService
 from app.services.vector_store import QdrantVectorStore
 
 
-def build_ingestion_service(*, session: AsyncSession, settings: Settings) -> IngestionService:
+def build_ingestion_service(
+    *, session: AsyncSession, settings: Settings
+) -> IngestionService:
     storage = LocalStorageService(settings)
     return IngestionService(
         session=session,

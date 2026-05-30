@@ -17,6 +17,16 @@ interface ConversationValue {
   activateCitationByLabel: (label: string) => void
 }
 
+function extractCitationLabels(content: string): Set<string> {
+  const labels = new Set<string>()
+  const pattern = /\[(\d+)]/g
+  let match: RegExpExecArray | null = null
+  while ((match = pattern.exec(content)) !== null) {
+    if (match[1]) labels.add(match[1])
+  }
+  return labels
+}
+
 const ConversationContext = createContext<ConversationValue | null>(null)
 
 export function ConversationProvider({ children }: { children: ReactNode }) {
@@ -88,22 +98,32 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
             ),
           )
         } else if (event.type === 'citations') {
-          const citations = Object.entries(event.map).map(([label, source]) => ({
-            id: `${source.chunkId}-${label}`,
-            label,
-            chunkId: source.chunkId,
-            documentId: source.docId,
-            documentName: source.filename,
-            page: source.page ?? 1,
-            snippet: source.snippet,
-          }))
-          setLatestCitations(citations)
-          setActiveCitationId(citations[0]?.id ?? null)
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === loadingId ? { ...message, citations } : message,
-            ),
-          )
+          setMessages((current) => {
+            const loadingMessage = current.find((message) => message.id === loadingId)
+            const usedLabels = extractCitationLabels(loadingMessage?.content ?? '')
+            const rawCitations = Object.entries(event.map)
+              .filter(([label]) => usedLabels.size === 0 || usedLabels.has(label))
+              .map(([label, source]) => ({
+                id: `${source.chunkId}-${label}`,
+                label,
+                chunkId: source.chunkId,
+                documentId: source.docId,
+                documentName: source.filename,
+                page: source.page ?? 1,
+                snippet: source.snippet,
+              }))
+
+            const deduped = Array.from(
+              new Map(rawCitations.map((citation) => [`${citation.chunkId}-${citation.label}`, citation])).values(),
+            )
+
+            setLatestCitations(deduped)
+            setActiveCitationId(deduped[0]?.id ?? null)
+
+            return current.map((message) =>
+              message.id === loadingId ? { ...message, citations: deduped } : message,
+            )
+          })
         } else if (event.type === 'error') {
           setMessages((current) =>
             current.map((message) =>

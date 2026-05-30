@@ -14,7 +14,9 @@ def _block(chunk: RetrievedChunk, label: str) -> str:
     return f"[{label}] {chunk.filename}{page}\n{chunk.text.strip()}"
 
 
-def pack_context(result: RetrievalResult, *, final_top_k: int, max_chars: int) -> PackedContext:
+def pack_context(
+    result: RetrievalResult, *, final_top_k: int, max_chars: int
+) -> PackedContext:
     selected: list[RetrievedChunk] = []
     blocks: list[str] = []
     used = 0

@@ -39,6 +39,16 @@ function wrapper({ children }: { children: React.ReactNode }) {
   )
 }
 
+async function selectReadyDocument(result: {
+  current: { pipeline: ReturnType<typeof useDocumentPipeline> }
+}) {
+  await waitFor(() => expect(result.current.pipeline.documents.length).toBeGreaterThan(0))
+  act(() => {
+    result.current.pipeline.selectDocument('doc-1')
+  })
+  await waitFor(() => expect(result.current.pipeline.activeDocument?.id).toBe('doc-1'))
+}
+
 describe('Conversation module', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -70,7 +80,7 @@ describe('Conversation module', () => {
       { wrapper },
     )
 
-    await waitFor(() => expect(result.current.pipeline.activeDocument?.id).toBe('doc-1'))
+    await selectReadyDocument(result)
 
     await act(async () => {
       await result.current.conversation.send('q')
@@ -92,6 +102,52 @@ describe('Conversation module', () => {
     expect(assistant?.citations?.[0]?.documentName).toBe('guide.pdf')
   })
 
+  it('keeps only citations referenced in assistant text', async () => {
+    vi.mocked(streamConversationMessage).mockImplementation(
+      async function* () {
+        yield { type: 'token', value: 'Answer cites only [1].' }
+        yield {
+          type: 'citations',
+          map: {
+            '1': {
+              chunkId: 'c1',
+              docId: 'd1',
+              filename: 'guide.pdf',
+              page: 2,
+              snippet: 'used citation',
+            },
+            '2': {
+              chunkId: 'c2',
+              docId: 'd1',
+              filename: 'guide.pdf',
+              page: 3,
+              snippet: 'unused citation',
+            },
+          },
+        }
+        yield { type: 'done' }
+      },
+    )
+
+    const { result } = renderHook(
+      () => ({ conversation: useConversation(), pipeline: useDocumentPipeline() }),
+      { wrapper },
+    )
+
+    await selectReadyDocument(result)
+
+    await act(async () => {
+      await result.current.conversation.send('q')
+    })
+
+    await waitFor(
+      () => expect(result.current.conversation.latestCitations).toHaveLength(1),
+      { timeout: 3000 },
+    )
+
+    expect(result.current.conversation.latestCitations[0]?.label).toBe('1')
+  })
+
   it('marks assistant failed on error event', async () => {
     vi.mocked(streamConversationMessage).mockImplementation(
       async function* () {
@@ -108,7 +164,7 @@ describe('Conversation module', () => {
       { wrapper },
     )
 
-    await waitFor(() => expect(result.current.pipeline.activeDocument?.id).toBe('doc-1'))
+    await selectReadyDocument(result)
 
     await act(async () => {
       await result.current.conversation.send('q')

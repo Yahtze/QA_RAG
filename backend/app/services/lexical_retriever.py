@@ -22,7 +22,9 @@ class LexicalRetriever:
         if not document_ids or not query.strip():
             return []
 
-        dialect = self.session.bind.dialect.name if self.session.bind is not None else ""
+        dialect = (
+            self.session.bind.dialect.name if self.session.bind is not None else ""
+        )
         if dialect == "postgresql":
             sql = text(
                 """

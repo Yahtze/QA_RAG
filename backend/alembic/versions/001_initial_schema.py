@@ -23,10 +23,16 @@ def upgrade() -> None:
         sa.Column("hashed_password", sa.String(length=255), nullable=False),
         sa.Column("name", sa.String(length=120), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("email"),
@@ -44,20 +50,29 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=20), nullable=False),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.CheckConstraint(
-            "status IN ('uploading','processing','ready','failed')", name="ck_documents_status"
+            "status IN ('uploading','processing','ready','failed')",
+            name="ck_documents_status",
         ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("storage_path"),
     )
     op.create_index("ix_documents_user_id", "documents", ["user_id"])
-    op.create_index("ix_documents_user_created_id", "documents", ["user_id", "created_at", "id"])
+    op.create_index(
+        "ix_documents_user_created_id", "documents", ["user_id", "created_at", "id"]
+    )
 
     op.create_table(
         "conversations",
@@ -65,10 +80,16 @@ def upgrade() -> None:
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("document_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
@@ -77,7 +98,9 @@ def upgrade() -> None:
     op.create_index("ix_conversations_user_id", "conversations", ["user_id"])
     op.create_index("ix_conversations_document_id", "conversations", ["document_id"])
     op.create_index(
-        "ix_conversations_user_created_id", "conversations", ["user_id", "created_at", "id"]
+        "ix_conversations_user_created_id",
+        "conversations",
+        ["user_id", "created_at", "id"],
     )
 
     op.create_table(
@@ -87,18 +110,28 @@ def upgrade() -> None:
         sa.Column("role", sa.String(length=20), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.CheckConstraint("role IN ('user','assistant')", name="ck_messages_role"),
-        sa.ForeignKeyConstraint(["conversation_id"], ["conversations.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["conversation_id"], ["conversations.id"], ondelete="CASCADE"
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_messages_conversation_id", "messages", ["conversation_id"])
     op.create_index(
-        "ix_messages_conversation_created_id", "messages", ["conversation_id", "created_at", "id"]
+        "ix_messages_conversation_created_id",
+        "messages",
+        ["conversation_id", "created_at", "id"],
     )
 
     op.create_table(
@@ -110,12 +143,20 @@ def upgrade() -> None:
         sa.Column("page_number", sa.Integer(), nullable=True),
         sa.Column("score", sa.Float(), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
-        sa.CheckConstraint("score >= 0.0 AND score <= 1.0", name="ck_citations_score_range"),
+        sa.CheckConstraint(
+            "score >= 0.0 AND score <= 1.0", name="ck_citations_score_range"
+        ),
         sa.ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["message_id"], ["messages.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),

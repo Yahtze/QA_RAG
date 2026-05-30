@@ -27,7 +27,10 @@ class QdrantCollectionService:
                 info = await client.get_collection(self.settings.QDRANT_COLLECTION_NAME)
                 size = info.config.params.vectors.size
                 distance = info.config.params.vectors.distance
-                if size != self.settings.EMBEDDING_DIMENSION or distance != Distance.COSINE:
+                if (
+                    size != self.settings.EMBEDDING_DIMENSION
+                    or distance != Distance.COSINE
+                ):
                     raise QdrantCollectionMismatchError(
                         "Qdrant collection mismatch: "
                         f"expected size={self.settings.EMBEDDING_DIMENSION},"

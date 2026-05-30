@@ -32,18 +32,20 @@ async def test_create_send_messages(db_session):
         async def answer(self, **kwargs):
             from app.models import Message, MessageRole
 
-            self.session.add_all([
-                Message(
-                    conversation_id=kwargs["conversation_id"],
-                    role=MessageRole.USER.value,
-                    content=kwargs["content"],
-                ),
-                Message(
-                    conversation_id=kwargs["conversation_id"],
-                    role=MessageRole.ASSISTANT.value,
-                    content="hi",
-                ),
-            ])
+            self.session.add_all(
+                [
+                    Message(
+                        conversation_id=kwargs["conversation_id"],
+                        role=MessageRole.USER.value,
+                        content=kwargs["content"],
+                    ),
+                    Message(
+                        conversation_id=kwargs["conversation_id"],
+                        role=MessageRole.ASSISTANT.value,
+                        content="hi",
+                    ),
+                ]
+            )
             await self.session.commit()
             yield AnswerEvent(type="token", value="hi")
             yield AnswerEvent(type="citations", map={})
@@ -56,7 +58,9 @@ async def test_create_send_messages(db_session):
     pair = await svc.send_message(user=user, conversation_id=conv.id, content="hi")
     assert pair.assistant_message.content == "hi"
 
-    history = await svc.messages(user=user, conversation_id=conv.id, cursor=None, limit=20)
+    history = await svc.messages(
+        user=user, conversation_id=conv.id, cursor=None, limit=20
+    )
     assert len(history.items) == 2
     rows = (await db_session.execute(select(Conversation))).scalars().all()
     assert len(rows) == 1

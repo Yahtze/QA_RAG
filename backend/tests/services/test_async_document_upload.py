@@ -12,6 +12,7 @@ class Upload:
 
     def __init__(self, data=b"hello"):
         from io import BytesIO
+
         self.file = BytesIO(data)
 
 

@@ -6,7 +6,12 @@ from app.models.document_chunk import DocumentChunk
 
 
 def test_document_status_values_are_ingestion_states():
-    assert [s.value for s in DocumentStatus] == ["pending", "processing", "ready", "failed"]
+    assert [s.value for s in DocumentStatus] == [
+        "pending",
+        "processing",
+        "ready",
+        "failed",
+    ]
 
 
 def test_document_ingestion_columns_exist():

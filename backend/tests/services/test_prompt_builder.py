@@ -34,7 +34,9 @@ def test_pack_context_assigns_labels_and_budget():
 
 def test_prompt_contains_strict_grounding_rules():
     packed = pack_context(
-        RetrievalResult(chunks=[chunk("Refunds take five days.")], no_context_reason=None),
+        RetrievalResult(
+            chunks=[chunk("Refunds take five days.")], no_context_reason=None
+        ),
         final_top_k=8,
         max_chars=12000,
     )
@@ -45,7 +47,10 @@ def test_prompt_contains_strict_grounding_rules():
     system = messages[0]["content"]
     assert "ONLY the context chunks" in system
     assert "Never use knowledge outside" in system
-    assert "I don't have enough information in the provided documents to answer this." in system
+    assert (
+        "I don't have enough information in the provided documents to answer this."
+        in system
+    )
     assert messages[1] == {"role": "user", "content": "When are refunds paid?"}
 
 

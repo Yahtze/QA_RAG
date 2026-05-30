@@ -97,7 +97,9 @@ class AnswerPipeline:
             yield AnswerEvent(
                 type="token",
                 value=ABSTENTION,
-                reason=str(result.no_context_reason) if result.no_context_reason else None,
+                reason=(
+                    str(result.no_context_reason) if result.no_context_reason else None
+                ),
             )
             yield AnswerEvent(type="citations", map={})
             yield AnswerEvent(type="done")
@@ -108,7 +110,9 @@ class AnswerPipeline:
             final_top_k=self.settings.RETRIEVAL_FINAL_TOP_K,
             max_chars=self.settings.CONTEXT_MAX_CHARS,
         )
-        messages = build_grounded_messages(question=content, context_text=packed.context_text)
+        messages = build_grounded_messages(
+            question=content, context_text=packed.context_text
+        )
 
         answer_parts: list[str] = []
         try:
@@ -136,7 +140,9 @@ class AnswerPipeline:
         )
         self.session.add(assistant)
         await self.session.flush()
-        self.session.add_all(citation_rows(message_id=assistant.id, chunks=packed.chunks))
+        self.session.add_all(
+            citation_rows(message_id=assistant.id, chunks=packed.chunks)
+        )
         await self.session.commit()
 
         yield AnswerEvent(type="citations", map=citations_event_map(packed.chunks))

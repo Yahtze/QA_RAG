@@ -20,7 +20,11 @@ from app.schemas.conversation import (
 )
 from app.services.answer_pipeline import AnswerEvent, AnswerPipeline
 from app.services.conversation import ConversationService
-from app.services.conversation_errors import ForbiddenError, InvalidStateError, NotFoundError
+from app.services.conversation_errors import (
+    ForbiddenError,
+    InvalidStateError,
+    NotFoundError,
+)
 from app.services.conversation_scope import ConversationScopeService
 from app.services.embeddings import OpenAIEmbeddingProvider
 from app.services.hybrid_retrieval import HybridRetriever
@@ -91,7 +95,9 @@ async def list_conversations(
     user=Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
-    return await ConversationService(session).list(user=user, cursor=cursor, limit=limit)
+    return await ConversationService(session).list(
+        user=user, cursor=cursor, limit=limit
+    )
 
 
 @router.put("/{conversation_id}/active-documents", response_model=ConversationOut)
@@ -126,7 +132,9 @@ async def send_message(
 ):
     try:
         pipeline = build_answer_pipeline(session, settings)
-        return await ConversationService(session, answer_pipeline=pipeline).send_message(
+        return await ConversationService(
+            session, answer_pipeline=pipeline
+        ).send_message(
             user=user,
             conversation_id=conversation_id,
             content=data.content,

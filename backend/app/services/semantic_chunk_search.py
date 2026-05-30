@@ -43,7 +43,9 @@ class QdrantSemanticChunkSearch:
             vector = (await self.embeddings.embed_texts([query]))[0]
             flt = qm.Filter(
                 must=[
-                    qm.FieldCondition(key="user_id", match=qm.MatchValue(value=str(user_id))),
+                    qm.FieldCondition(
+                        key="user_id", match=qm.MatchValue(value=str(user_id))
+                    ),
                     qm.FieldCondition(
                         key="document_id",
                         match=qm.MatchAny(any=[str(x) for x in document_ids]),
@@ -57,7 +59,9 @@ class QdrantSemanticChunkSearch:
                 limit=top_k,
             )
             return [
-                RankedChunkHit(chunk_id=UUID(str(point.id)), rank=i, score=float(point.score))
+                RankedChunkHit(
+                    chunk_id=UUID(str(point.id)), rank=i, score=float(point.score)
+                )
                 for i, point in enumerate(response.points, start=1)
             ]
         except Exception as exc:  # pragma: no cover

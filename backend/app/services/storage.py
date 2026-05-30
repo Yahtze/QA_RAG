@@ -51,9 +51,7 @@ class LocalStorageService:
             ext = (
                 ".pdf"
                 if ctype == "application/pdf"
-                else ".md"
-                if ctype == "text/markdown"
-                else ".txt"
+                else ".md" if ctype == "text/markdown" else ".txt"
             )
         rel = Path("uploads") / str(user_id) / f"{document_id}{ext}"
         full = self.settings.storage_root_path / rel

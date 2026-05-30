@@ -14,7 +14,9 @@ Context:
 {chunks}"""
 
 
-def build_grounded_messages(*, question: str, context_text: str) -> list[dict[str, str]]:
+def build_grounded_messages(
+    *, question: str, context_text: str
+) -> list[dict[str, str]]:
     return [
         {"role": "system", "content": SYSTEM_PROMPT.format(chunks=context_text)},
         {"role": "user", "content": question},

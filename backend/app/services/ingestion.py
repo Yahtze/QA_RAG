@@ -14,15 +14,18 @@ from app.services.embeddings import EmbeddingProvider
 from app.services.ingestion_types import IngestionPhase
 from app.services.storage import LocalStorageService
 from app.services.vector_store import VectorStore
-from app.services.ingestion_errors import DeterministicIngestionError, RetryableIngestionError
+from app.services.ingestion_errors import (
+    DeterministicIngestionError,
+    RetryableIngestionError,
+)
 
 logger = logging.getLogger(__name__)
 
-PDF_ZERO_CHUNKS_ERROR = "No extractable text found — likely a scanned or image-only PDF."
-TEXT_ZERO_CHUNKS_ERROR = "No extractable text found in document."
-GENERIC_INGESTION_ERROR = (
-    "An unexpected error occurred during ingestion. The document has been retained for review."
+PDF_ZERO_CHUNKS_ERROR = (
+    "No extractable text found — likely a scanned or image-only PDF."
 )
+TEXT_ZERO_CHUNKS_ERROR = "No extractable text found in document."
+GENERIC_INGESTION_ERROR = "An unexpected error occurred during ingestion. The document has been retained for review."
 
 
 class IngestionService:
@@ -77,7 +80,9 @@ class IngestionService:
 
             phase = IngestionPhase.EXTRACTION
             extracted = await extract_document(
-                filename=document.filename, content_type=document.content_type, data=data
+                filename=document.filename,
+                content_type=document.content_type,
+                data=data,
             )
 
             phase = IngestionPhase.CHUNKING
@@ -99,11 +104,15 @@ class IngestionService:
                             "page_count": extracted.page_count,
                         },
                     )
-                    raise DeterministicIngestionError(PDF_ZERO_CHUNKS_ERROR, phase.value)
+                    raise DeterministicIngestionError(
+                        PDF_ZERO_CHUNKS_ERROR, phase.value
+                    )
                 raise DeterministicIngestionError(TEXT_ZERO_CHUNKS_ERROR, phase.value)
 
             phase = IngestionPhase.EMBEDDING
-            vectors = await self.embedding_provider.embed_texts([c.text for c in chunks])
+            vectors = await self.embedding_provider.embed_texts(
+                [c.text for c in chunks]
+            )
 
             phase = IngestionPhase.DATABASE
             await self.repo.replace_chunks_pending_embedding(document.id, chunks)
@@ -128,7 +137,9 @@ class IngestionService:
                 if isinstance(exc, DeterministicIngestionError)
                 else IngestionPhase.EXTRACTION
             )
-            await self.repo.mark_failed(document_id, error_message=msg, phase=fail_phase)
+            await self.repo.mark_failed(
+                document_id, error_message=msg, phase=fail_phase
+            )
             raise
         except RetryableIngestionError:
             logger.warning(
@@ -144,5 +155,4 @@ class IngestionService:
             await self.repo.mark_failed(
                 document_id, error_message=GENERIC_INGESTION_ERROR, phase=phase
             )
-            document = await self.repo.get_document(document_id)
-            return DocumentOut.model_validate(document)
+            raise

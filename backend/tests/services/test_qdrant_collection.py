@@ -2,7 +2,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.qdrant_collection import QdrantCollectionMismatchError, QdrantCollectionService
+from app.services.qdrant_collection import (
+    QdrantCollectionMismatchError,
+    QdrantCollectionService,
+)
 
 
 @pytest.mark.asyncio
@@ -24,7 +27,9 @@ async def test_qdrant_ensure_create(monkeypatch, settings):
             return None
 
     fake = FakeClient()
-    monkeypatch.setattr("app.services.qdrant_collection.AsyncQdrantClient", lambda **_: fake)
+    monkeypatch.setattr(
+        "app.services.qdrant_collection.AsyncQdrantClient", lambda **_: fake
+    )
     await QdrantCollectionService(settings).ensure_collection()
     assert fake.created is True
 
@@ -40,7 +45,9 @@ async def test_qdrant_dimension_mismatch(monkeypatch, settings):
         async def get_collection(self, _name):
             return SimpleNamespace(
                 config=SimpleNamespace(
-                    params=SimpleNamespace(vectors=SimpleNamespace(size=10, distance="Cosine"))
+                    params=SimpleNamespace(
+                        vectors=SimpleNamespace(size=10, distance="Cosine")
+                    )
                 )
             )
 
@@ -74,7 +81,9 @@ async def test_collection_service_creates_payload_indexes(monkeypatch, settings)
         async def close(self):
             pass
 
-    monkeypatch.setattr("app.services.qdrant_collection.AsyncQdrantClient", lambda **_: Client())
+    monkeypatch.setattr(
+        "app.services.qdrant_collection.AsyncQdrantClient", lambda **_: Client()
+    )
     await QdrantCollectionService(settings).ensure_collection()
     assert (
         "create_payload_index",

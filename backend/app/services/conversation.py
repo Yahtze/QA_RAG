@@ -11,8 +11,17 @@ from app.core.pagination import (
     page_from_items,
 )
 from app.models import Conversation, Message, MessageRole, User
-from app.schemas.conversation import ConversationOut, MessageOut, MessagePairOut, CitationOut
-from app.services.conversation_errors import ForbiddenError, InvalidStateError, NotFoundError
+from app.schemas.conversation import (
+    ConversationOut,
+    MessageOut,
+    MessagePairOut,
+    CitationOut,
+)
+from app.services.conversation_errors import (
+    ForbiddenError,
+    InvalidStateError,
+    NotFoundError,
+)
 from app.services.conversation_scope import ConversationScopeService
 
 
@@ -29,7 +38,9 @@ class ConversationService:
         return ConversationOut(
             id=conv.id,
             document_id=conv.document_id,
-            active_document_ids=[UUID(str(x)) for x in (conv.active_document_ids or [])],
+            active_document_ids=[
+                UUID(str(x)) for x in (conv.active_document_ids or [])
+            ],
             dangling_user_message_id=dangling_user_message_id,
             needs_retry=dangling_user_message_id is not None,
             created_at=conv.created_at,
@@ -51,7 +62,9 @@ class ConversationService:
             return latest.id
         return None
 
-    async def create(self, *, user: User, document_id, active_document_ids: list | None = None):
+    async def create(
+        self, *, user: User, document_id, active_document_ids: list | None = None
+    ):
         conv = await ConversationScopeService(self.session).create_conversation(
             user=user,
             document_id=document_id,
@@ -74,7 +87,9 @@ class ConversationService:
             out.append(
                 self._conversation_out(
                     conv,
-                    dangling_user_message_id=await self._dangling_user_message_id(conv.id),
+                    dangling_user_message_id=await self._dangling_user_message_id(
+                        conv.id
+                    ),
                 )
             )
 
@@ -155,7 +170,8 @@ class ConversationService:
                 content=m.content,
                 created_at=m.created_at,
                 citations=[
-                    CitationOut.model_validate(c, from_attributes=True) for c in m.citations
+                    CitationOut.model_validate(c, from_attributes=True)
+                    for c in m.citations
                 ],
             )
 

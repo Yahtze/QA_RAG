@@ -4,7 +4,11 @@ import pytest
 
 from app.models import Conversation, Document, DocumentChunk, DocumentStatus, User
 from app.services.conversation_scope import ConversationScopeService
-from app.services.hybrid_retrieval import HybridRetriever, RankedChunkHit, reciprocal_rank_fusion
+from app.services.hybrid_retrieval import (
+    HybridRetriever,
+    RankedChunkHit,
+    reciprocal_rank_fusion,
+)
 
 
 class FakeLexical:
@@ -84,7 +88,9 @@ async def make_fixture(db_session):
         )
         chunks.append(c)
     db_session.add_all(chunks)
-    conv = Conversation(user_id=user.id, document_id=ready.id, active_document_ids=[str(ready.id)])
+    conv = Conversation(
+        user_id=user.id, document_id=ready.id, active_document_ids=[str(ready.id)]
+    )
     db_session.add(conv)
     await db_session.commit()
     return user, conv, chunks
@@ -103,7 +109,9 @@ def test_rrf_merge_dedupe_prefers_dual_hits():
 
 
 @pytest.mark.asyncio
-async def test_hybrid_retrieval_filters_to_active_ready_user_chunks(db_session, settings):
+async def test_hybrid_retrieval_filters_to_active_ready_user_chunks(
+    db_session, settings
+):
     user, conv, chunks = await make_fixture(db_session)
     active_chunk, inactive_chunk, failed_chunk, wrong_chunk = chunks
     lexical = FakeLexical(

@@ -5,16 +5,19 @@ from app.models.user import User
 from app.services.document_ingestion_repository import DocumentIngestionRepository
 
 
-
 @pytest.mark.asyncio
-async def test_worker_run_ingestion_calls_factory_and_commits(db_session, settings, monkeypatch):
+async def test_worker_run_ingestion_calls_factory_and_commits(
+    db_session, settings, monkeypatch
+):
     calls = []
 
     class Service:
         async def ingest_document(self, document_id):
             calls.append(document_id)
 
-    monkeypatch.setattr("app.worker.tasks.build_ingestion_service", lambda **_: Service())
+    monkeypatch.setattr(
+        "app.worker.tasks.build_ingestion_service", lambda **_: Service()
+    )
     await app.worker.tasks.run_ingestion(
         "00000000-0000-0000-0000-000000000001", session=db_session, settings=settings
     )
@@ -41,7 +44,19 @@ async def test_final_retry_failure_marks_failed(db_session, settings):
     )
     await repo.mark_processing(doc.id)
 
-    await mark_final_retry_failure(db_session, doc.id, RuntimeError("boom"), max_retries=3)
+    await mark_final_retry_failure(
+        db_session, doc.id, RuntimeError("boom"), max_retries=3
+    )
     refreshed = await repo.get_document(doc.id)
     assert refreshed.status == "failed"
     assert refreshed.error_message == "Ingestion failed after 3 retries: boom"
+
+
+def test_worker_task_reraises_unexpected_ingestion_failure(monkeypatch):
+    async def fake_run_ingestion(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("app.worker.tasks.run_ingestion", fake_run_ingestion)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        app.worker.tasks.ingest_document_task("00000000-0000-0000-0000-000000000001")

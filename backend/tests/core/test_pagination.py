@@ -3,7 +3,13 @@ from uuid import UUID
 
 import pytest
 
-from app.core.pagination import Cursor, CursorPage, decode_cursor, encode_cursor, normalize_limit
+from app.core.pagination import (
+    Cursor,
+    CursorPage,
+    decode_cursor,
+    encode_cursor,
+    normalize_limit,
+)
 
 
 def test_cursor_round_trip():

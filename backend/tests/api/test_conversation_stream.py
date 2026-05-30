@@ -40,7 +40,9 @@ async def test_stream_endpoint_returns_sse_events(
         embedding_model="m",
     )
     db_session.add(chunk)
-    conv = Conversation(user_id=user_id, document_id=doc.id, active_document_ids=[str(doc.id)])
+    conv = Conversation(
+        user_id=user_id, document_id=doc.id, active_document_ids=[str(doc.id)]
+    )
     db_session.add(conv)
     await db_session.commit()
 
@@ -81,11 +83,17 @@ async def test_stream_endpoint_returns_sse_events(
         for line in response.text.splitlines()
         if line.startswith("data: ")
     ]
-    assert [json.loads(line)["type"] for line in lines] == ["token", "citations", "done"]
+    assert [json.loads(line)["type"] for line in lines] == [
+        "token",
+        "citations",
+        "done",
+    ]
 
 
 @pytest.mark.asyncio
-async def test_active_scope_endpoint_updates_conversation(async_client, auth_headers, db_session):
+async def test_active_scope_endpoint_updates_conversation(
+    async_client, auth_headers, db_session
+):
     user = (await async_client.get("/api/v1/auth/me", headers=auth_headers)).json()
     user_id = uuid.UUID(user["id"])
     doc = Document(

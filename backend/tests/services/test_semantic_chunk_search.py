@@ -28,7 +28,9 @@ async def test_semantic_search_uses_query_points(settings):
 
     user_id = uuid4()
     doc_id = uuid4()
-    hits = await service.search(user_id=user_id, document_ids=[doc_id], query="refund", top_k=5)
+    hits = await service.search(
+        user_id=user_id, document_ids=[doc_id], query="refund", top_k=5
+    )
 
     assert len(hits) == 1
     assert hits[0].rank == 1

@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.models import Document, DocumentChunk, DocumentStatus
 from app.services.conversation_scope import QueryableConversationScope
-from app.services.retrieval_types import NoContextReason, RetrievalResult, RetrievedChunk
+from app.services.retrieval_types import (
+    NoContextReason,
+    RetrievalResult,
+    RetrievedChunk,
+)
 
 
 @dataclass(frozen=True)
@@ -45,7 +49,9 @@ def reciprocal_rank_fusion(
         semantic_ranks[hit.chunk_id] = hit.rank
         scores[hit.chunk_id] = scores.get(hit.chunk_id, 0.0) + 1.0 / (k + hit.rank)
 
-    ordered = sorted(scores.items(), key=lambda item: (-item[1], str(item[0])))[:final_top_k]
+    ordered = sorted(scores.items(), key=lambda item: (-item[1], str(item[0])))[
+        :final_top_k
+    ]
     return [
         FusedHit(
             chunk_id=chunk_id,

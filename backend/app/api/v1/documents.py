@@ -13,8 +13,15 @@ from app.schemas.document import (
     DeletedDocumentOut,
     DocumentOut,
 )
-from app.services.async_document_upload import AsyncDocumentUpload, ENQUEUE_FAILURE_MESSAGE
-from app.services.document_pipeline import DocumentPipelineService, ForbiddenError, NotFoundError
+from app.services.async_document_upload import (
+    AsyncDocumentUpload,
+    ENQUEUE_FAILURE_MESSAGE,
+)
+from app.services.document_pipeline import (
+    DocumentPipelineService,
+    ForbiddenError,
+    NotFoundError,
+)
 from app.services.ingestion_factory import build_ingestion_service
 from app.services.ingestion_queue import CeleryIngestionQueue, EnqueueIngestionError
 from app.services.storage import (
@@ -28,7 +35,9 @@ from app.services.vector_store import QdrantVectorStore
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-async def _upload_single_document(*, file: UploadFile, user, session: AsyncSession, settings):
+async def _upload_single_document(
+    *, file: UploadFile, user, session: AsyncSession, settings
+):
     if settings.USE_ASYNC_INGESTION:
         return await AsyncDocumentUpload(
             session=session,
@@ -53,7 +62,9 @@ async def upload(
     settings=Depends(get_settings_dep),
 ):
     try:
-        return await _upload_single_document(file=file, user=user, session=session, settings=settings)
+        return await _upload_single_document(
+            file=file, user=user, session=session, settings=settings
+        )
     except EnqueueIngestionError:
         raise HTTPException(status_code=500, detail=ENQUEUE_FAILURE_MESSAGE)
     except UploadTooLargeError:
@@ -62,7 +73,11 @@ async def upload(
         raise HTTPException(status_code=422, detail="Invalid file")
 
 
-@router.post("/upload-batch", response_model=BatchUploadSummaryOut, status_code=HTTP_207_MULTI_STATUS)
+@router.post(
+    "/upload-batch",
+    response_model=BatchUploadSummaryOut,
+    status_code=HTTP_207_MULTI_STATUS,
+)
 async def upload_batch(
     files: list[UploadFile] = File(...),
     user=Depends(get_current_user),
@@ -120,7 +135,9 @@ async def upload_batch(
             )
             failed += 1
 
-    return BatchUploadSummaryOut(total=len(files), accepted=accepted, failed=failed, results=results)
+    return BatchUploadSummaryOut(
+        total=len(files), accepted=accepted, failed=failed, results=results
+    )
 
 
 @router.get("", response_model=CursorPage[DocumentOut])
@@ -144,9 +161,9 @@ async def get_document(
     settings=Depends(get_settings_dep),
 ):
     try:
-        return await DocumentPipelineService(session, LocalStorageService(settings)).get(
-            user=user, document_id=document_id
-        )
+        return await DocumentPipelineService(
+            session, LocalStorageService(settings)
+        ).get(user=user, document_id=document_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Not found")
     except ForbiddenError:
@@ -162,7 +179,9 @@ async def delete_document(
 ):
     try:
         service = DocumentPipelineService(
-            session, LocalStorageService(settings), vector_store=QdrantVectorStore(settings)
+            session,
+            LocalStorageService(settings),
+            vector_store=QdrantVectorStore(settings),
         )
         return await service.delete(user=user, document_id=document_id)
     except NotFoundError:

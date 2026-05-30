@@ -13,14 +13,18 @@ async def test_conversation_flow(async_client, auth_headers, monkeypatch, db_ses
     monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: q)
 
     files = {"file": ("doc.txt", b"hello world", "text/plain")}
-    up = await async_client.post("/api/v1/documents/upload", files=files, headers=auth_headers)
+    up = await async_client.post(
+        "/api/v1/documents/upload", files=files, headers=auth_headers
+    )
     doc_id = up.json()["id"]
     assert up.json()["status"] == "pending"
 
     # Manually mark document as ready so conversation can be created
-    doc = (await db_session.execute(
-        select(Document).where(Document.id == uuid.UUID(doc_id))
-    )).scalar_one()
+    doc = (
+        await db_session.execute(
+            select(Document).where(Document.id == uuid.UUID(doc_id))
+        )
+    ).scalar_one()
     doc.status = "ready"
     await db_session.commit()
 
@@ -38,18 +42,20 @@ async def test_conversation_flow(async_client, auth_headers, monkeypatch, db_ses
             from app.models import Message, MessageRole
             from app.services.answer_pipeline import AnswerEvent
 
-            self.session.add_all([
-                Message(
-                    conversation_id=kwargs["conversation_id"],
-                    role=MessageRole.USER.value,
-                    content=kwargs["content"],
-                ),
-                Message(
-                    conversation_id=kwargs["conversation_id"],
-                    role=MessageRole.ASSISTANT.value,
-                    content="hello",
-                ),
-            ])
+            self.session.add_all(
+                [
+                    Message(
+                        conversation_id=kwargs["conversation_id"],
+                        role=MessageRole.USER.value,
+                        content=kwargs["content"],
+                    ),
+                    Message(
+                        conversation_id=kwargs["conversation_id"],
+                        role=MessageRole.ASSISTANT.value,
+                        content="hello",
+                    ),
+                ]
+            )
             await self.session.commit()
             yield AnswerEvent(type="token", value="hello")
             yield AnswerEvent(type="citations", map={})
@@ -91,14 +97,18 @@ async def test_conversation_rejects_non_ready_documents(
     )
 
     files = {"file": ("doc.txt", b"hello", "text/plain")}
-    up = await async_client.post("/api/v1/documents/upload", files=files, headers=auth_headers)
+    up = await async_client.post(
+        "/api/v1/documents/upload", files=files, headers=auth_headers
+    )
     doc_id = up.json()["id"]
 
     # Manually set the document status
     await db_session.execute(select(User).where(User.email == "user@example.com"))
-    doc = (await db_session.execute(
-        select(Document).where(Document.id == uuid.UUID(doc_id))
-    )).scalar_one()
+    doc = (
+        await db_session.execute(
+            select(Document).where(Document.id == uuid.UUID(doc_id))
+        )
+    ).scalar_one()
     doc.status = status
     await db_session.commit()
 

@@ -25,7 +25,9 @@ async def test_extract_text_utf8_as_page_one():
 @pytest.mark.asyncio
 async def test_extract_markdown_utf8_failure():
     with pytest.raises(ExtractionError, match=TEXT_UTF8_ERROR):
-        await extract_document(filename="bad.md", content_type="text/markdown", data=b"\xff")
+        await extract_document(
+            filename="bad.md", content_type="text/markdown", data=b"\xff"
+        )
 
 
 @pytest.mark.asyncio

@@ -20,7 +20,9 @@ def _chunk():
 
 
 def test_build_payload_contract_uses_string_uuids():
-    payload = build_payload(user_id=UUID("33333333-3333-3333-3333-333333333333"), chunk=_chunk())
+    payload = build_payload(
+        user_id=UUID("33333333-3333-3333-3333-333333333333"), chunk=_chunk()
+    )
     assert payload == {
         "user_id": "33333333-3333-3333-3333-333333333333",
         "document_id": "11111111-1111-1111-1111-111111111111",

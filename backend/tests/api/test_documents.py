@@ -13,23 +13,39 @@ def test_document_out_has_ingestion_fields():
 
 def test_admin_out_extends_operational_fields_without_http_route():
     fields = DocumentAdminOut.model_fields
-    assert {"qdrant_synced_at", "retention_note", "retry_count", "last_retry_at"} <= set(fields)
+    assert {
+        "qdrant_synced_at",
+        "retention_note",
+        "retry_count",
+        "last_retry_at",
+    } <= set(fields)
 
 
 def test_deleted_document_out_shape():
     assert (
-        DeletedDocumentOut(id="00000000-0000-0000-0000-000000000000", deleted=True).deleted is True
+        DeletedDocumentOut(
+            id="00000000-0000-0000-0000-000000000000", deleted=True
+        ).deleted
+        is True
     )
 
 
 @pytest.mark.asyncio
-async def test_documents_upload_list_get_delete(async_client, auth_headers, monkeypatch):
+async def test_documents_upload_list_get_delete(
+    async_client, auth_headers, monkeypatch
+):
     async def _noop(self, *args, **kwargs):
         return None
 
-    monkeypatch.setattr("app.services.vector_store.QdrantVectorStore.ensure_collection", _noop)
-    monkeypatch.setattr("app.services.vector_store.QdrantVectorStore.delete_document_points", _noop)
-    monkeypatch.setattr("app.services.vector_store.QdrantVectorStore.upsert_chunks", _noop)
+    monkeypatch.setattr(
+        "app.services.vector_store.QdrantVectorStore.ensure_collection", _noop
+    )
+    monkeypatch.setattr(
+        "app.services.vector_store.QdrantVectorStore.delete_document_points", _noop
+    )
+    monkeypatch.setattr(
+        "app.services.vector_store.QdrantVectorStore.upsert_chunks", _noop
+    )
 
     from app.services.ingestion_queue import FakeIngestionQueue
 
@@ -39,7 +55,9 @@ async def test_documents_upload_list_get_delete(async_client, auth_headers, monk
     )
 
     files = {"file": ("doc.txt", b"hello", "text/plain")}
-    up = await async_client.post("/api/v1/documents/upload", files=files, headers=auth_headers)
+    up = await async_client.post(
+        "/api/v1/documents/upload", files=files, headers=auth_headers
+    )
     assert up.status_code == 201
     doc_id = up.json()["id"]
 
@@ -50,20 +68,26 @@ async def test_documents_upload_list_get_delete(async_client, auth_headers, monk
     getr = await async_client.get(f"/api/v1/documents/{doc_id}", headers=auth_headers)
     assert getr.status_code == 200
 
-    dele = await async_client.delete(f"/api/v1/documents/{doc_id}", headers=auth_headers)
+    dele = await async_client.delete(
+        f"/api/v1/documents/{doc_id}", headers=auth_headers
+    )
     assert dele.status_code == 200
     assert dele.json() == {"id": doc_id, "deleted": True}
 
 
 @pytest.mark.asyncio
-async def test_upload_route_returns_pending_and_no_task_id(async_client, auth_headers, monkeypatch):
+async def test_upload_route_returns_pending_and_no_task_id(
+    async_client, auth_headers, monkeypatch
+):
     from app.services.ingestion_queue import FakeIngestionQueue
 
     q = FakeIngestionQueue()
     monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: q)
 
     files = {"file": ("async.txt", b"hello", "text/plain")}
-    r = await async_client.post("/api/v1/documents/upload", files=files, headers=auth_headers)
+    r = await async_client.post(
+        "/api/v1/documents/upload", files=files, headers=auth_headers
+    )
 
     assert r.status_code == 201
     body = r.json()
@@ -73,25 +97,35 @@ async def test_upload_route_returns_pending_and_no_task_id(async_client, auth_he
 
 
 @pytest.mark.asyncio
-async def test_upload_route_maps_enqueue_failure_to_500(async_client, auth_headers, monkeypatch):
+async def test_upload_route_maps_enqueue_failure_to_500(
+    async_client, auth_headers, monkeypatch
+):
     from app.services.ingestion_queue import FakeIngestionQueue
 
     monkeypatch.setattr(
-        "app.api.v1.documents.CeleryIngestionQueue", lambda settings: FakeIngestionQueue(fail=True)
+        "app.api.v1.documents.CeleryIngestionQueue",
+        lambda settings: FakeIngestionQueue(fail=True),
     )
 
     files = {"file": ("async.txt", b"hello", "text/plain")}
-    r = await async_client.post("/api/v1/documents/upload", files=files, headers=auth_headers)
+    r = await async_client.post(
+        "/api/v1/documents/upload", files=files, headers=auth_headers
+    )
 
     assert r.status_code == 500
     assert r.json()["detail"] == "Failed to enqueue ingestion task."
 
 
 @pytest.mark.asyncio
-async def test_upload_batch_mixed_valid_invalid_returns_207(async_client, auth_headers, monkeypatch):
+async def test_upload_batch_mixed_valid_invalid_returns_207(
+    async_client, auth_headers, monkeypatch
+):
     from app.services.ingestion_queue import FakeIngestionQueue
 
-    monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: FakeIngestionQueue())
+    monkeypatch.setattr(
+        "app.api.v1.documents.CeleryIngestionQueue",
+        lambda settings: FakeIngestionQueue(),
+    )
 
     files = [
         ("files", ("good-1.txt", b"hello", "text/plain")),
@@ -99,28 +133,41 @@ async def test_upload_batch_mixed_valid_invalid_returns_207(async_client, auth_h
         ("files", ("good-2.md", b"# ok", "text/markdown")),
     ]
 
-    r = await async_client.post("/api/v1/documents/upload-batch", files=files, headers=auth_headers)
+    r = await async_client.post(
+        "/api/v1/documents/upload-batch", files=files, headers=auth_headers
+    )
 
     assert r.status_code == 207
     body = r.json()
     assert body["total"] == 3
     assert body["accepted"] == 2
     assert body["failed"] == 1
-    assert [item["status"] for item in body["results"]] == ["accepted", "failed", "accepted"]
+    assert [item["status"] for item in body["results"]] == [
+        "accepted",
+        "failed",
+        "accepted",
+    ]
 
 
 @pytest.mark.asyncio
-async def test_upload_batch_all_valid_returns_207(async_client, auth_headers, monkeypatch):
+async def test_upload_batch_all_valid_returns_207(
+    async_client, auth_headers, monkeypatch
+):
     from app.services.ingestion_queue import FakeIngestionQueue
 
-    monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: FakeIngestionQueue())
+    monkeypatch.setattr(
+        "app.api.v1.documents.CeleryIngestionQueue",
+        lambda settings: FakeIngestionQueue(),
+    )
 
     files = [
         ("files", ("one.txt", b"hello", "text/plain")),
         ("files", ("two.md", b"# world", "text/markdown")),
     ]
 
-    r = await async_client.post("/api/v1/documents/upload-batch", files=files, headers=auth_headers)
+    r = await async_client.post(
+        "/api/v1/documents/upload-batch", files=files, headers=auth_headers
+    )
 
     assert r.status_code == 207
     body = r.json()
@@ -131,17 +178,24 @@ async def test_upload_batch_all_valid_returns_207(async_client, auth_headers, mo
 
 
 @pytest.mark.asyncio
-async def test_upload_batch_all_invalid_returns_207(async_client, auth_headers, monkeypatch):
+async def test_upload_batch_all_invalid_returns_207(
+    async_client, auth_headers, monkeypatch
+):
     from app.services.ingestion_queue import FakeIngestionQueue
 
-    monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: FakeIngestionQueue())
+    monkeypatch.setattr(
+        "app.api.v1.documents.CeleryIngestionQueue",
+        lambda settings: FakeIngestionQueue(),
+    )
 
     files = [
         ("files", ("bad-1.exe", b"abc", "application/x-msdownload")),
         ("files", ("bad-2.exe", b"def", "application/x-msdownload")),
     ]
 
-    r = await async_client.post("/api/v1/documents/upload-batch", files=files, headers=auth_headers)
+    r = await async_client.post(
+        "/api/v1/documents/upload-batch", files=files, headers=auth_headers
+    )
 
     assert r.status_code == 207
     body = r.json()
@@ -152,12 +206,19 @@ async def test_upload_batch_all_invalid_returns_207(async_client, auth_headers, 
 
 
 @pytest.mark.asyncio
-async def test_upload_batch_empty_list_returns_422(async_client, auth_headers, monkeypatch):
+async def test_upload_batch_empty_list_returns_422(
+    async_client, auth_headers, monkeypatch
+):
     from app.services.ingestion_queue import FakeIngestionQueue
 
-    monkeypatch.setattr("app.api.v1.documents.CeleryIngestionQueue", lambda settings: FakeIngestionQueue())
+    monkeypatch.setattr(
+        "app.api.v1.documents.CeleryIngestionQueue",
+        lambda settings: FakeIngestionQueue(),
+    )
 
-    r = await async_client.post("/api/v1/documents/upload-batch", files=[], headers=auth_headers)
+    r = await async_client.post(
+        "/api/v1/documents/upload-batch", files=[], headers=auth_headers
+    )
 
     assert r.status_code == 422
 

@@ -15,9 +15,7 @@ class OpenAICompatibleLLMProvider:
         settings.validate_llm_config()
         kwargs = {
             "api_key": (
-                settings.LLM_API_KEY.get_secret_value()
-                if settings.LLM_API_KEY
-                else ""
+                settings.LLM_API_KEY.get_secret_value() if settings.LLM_API_KEY else ""
             )
         }
         if settings.LLM_BASE_URL:

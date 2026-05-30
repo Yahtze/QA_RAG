@@ -5,7 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Conversation, Document, DocumentStatus, User
-from app.services.conversation_errors import ForbiddenError, InvalidStateError, NotFoundError
+from app.services.conversation_errors import (
+    ForbiddenError,
+    InvalidStateError,
+    NotFoundError,
+)
 
 
 @dataclass(frozen=True)
@@ -28,7 +32,9 @@ class ConversationScopeService:
         document_id: UUID | None,
         active_document_ids: list[UUID],
     ) -> Conversation:
-        ids = list(dict.fromkeys(active_document_ids or ([document_id] if document_id else [])))
+        ids = list(
+            dict.fromkeys(active_document_ids or ([document_id] if document_id else []))
+        )
         await self._validate_documents(user=user, document_ids=ids, require_ready=True)
         conv = Conversation(
             user_id=user.id,
@@ -47,7 +53,9 @@ class ConversationScopeService:
         conversation_id: UUID,
         active_document_ids: list[UUID],
     ) -> Conversation:
-        conv = await self._get_owned_conversation(user=user, conversation_id=conversation_id)
+        conv = await self._get_owned_conversation(
+            user=user, conversation_id=conversation_id
+        )
         ids = list(dict.fromkeys(active_document_ids))
         await self._validate_documents(user=user, document_ids=ids, require_ready=True)
         conv.active_document_ids = [str(x) for x in ids]
@@ -61,7 +69,9 @@ class ConversationScopeService:
         user: User,
         conversation_id: UUID,
     ) -> QueryableConversationScope:
-        conv = await self._get_owned_conversation(user=user, conversation_id=conversation_id)
+        conv = await self._get_owned_conversation(
+            user=user, conversation_id=conversation_id
+        )
         active_ids = [UUID(str(x)) for x in (conv.active_document_ids or [])]
         if not active_ids:
             return QueryableConversationScope(conv.id, user.id, [], [], {})
