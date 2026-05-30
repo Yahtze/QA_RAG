@@ -31,3 +31,17 @@ class DocumentAdminOut(DocumentOut):
 class DeletedDocumentOut(BaseModel):
     id: UUID
     deleted: bool = True
+
+
+class BatchUploadItemOut(BaseModel):
+    filename: str
+    status: str
+    document: DocumentOut | None = None
+    error: str | None = None
+
+
+class BatchUploadSummaryOut(BaseModel):
+    total: int
+    accepted: int
+    failed: int
+    results: list[BatchUploadItemOut]

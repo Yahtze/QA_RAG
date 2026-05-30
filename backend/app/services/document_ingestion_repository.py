@@ -18,7 +18,13 @@ class DocumentIngestionRepository:
         self.session = session
 
     async def create_pending_without_commit(
-        self, *, user: User, filename: str, content_type: str, size_bytes: int, storage_path: str
+        self,
+        *,
+        user: User,
+        filename: str,
+        content_type: str,
+        size_bytes: int,
+        storage_path: str,
     ) -> Document:
         doc = Document(
             user_id=user.id,
@@ -37,7 +43,13 @@ class DocumentIngestionRepository:
         await self.session.commit()
 
     async def create_pending(
-        self, *, user: User, filename: str, content_type: str, size_bytes: int, storage_path: str
+        self,
+        *,
+        user: User,
+        filename: str,
+        content_type: str,
+        size_bytes: int,
+        storage_path: str,
     ) -> Document:
         doc = await self.create_pending_without_commit(
             user=user,
@@ -52,7 +64,9 @@ class DocumentIngestionRepository:
 
     async def get_document(self, document_id: UUID) -> Document | None:
         return (
-            await self.session.execute(select(Document).where(Document.id == document_id))
+            await self.session.execute(
+                select(Document).where(Document.id == document_id)
+            )
         ).scalar_one_or_none()
 
     async def mark_processing(self, document_id: UUID) -> None:
@@ -75,11 +89,15 @@ class DocumentIngestionRepository:
     async def mark_ready_after_vector_sync(
         self, document_id: UUID, *, page_count: int, chunk_count: int
     ) -> None:
-        now = datetime.now(UTC)
+        aware_now = datetime.now(UTC)
+        naive_utc_now = aware_now.replace(tzinfo=None)
         await self.session.execute(
             update(DocumentChunk)
-            .where(DocumentChunk.document_id == document_id, DocumentChunk.embedded_at.is_(None))
-            .values(embedded_at=now)
+            .where(
+                DocumentChunk.document_id == document_id,
+                DocumentChunk.embedded_at.is_(None),
+            )
+            .values(embedded_at=naive_utc_now)
         )
         await self.session.execute(
             update(Document)
@@ -87,7 +105,7 @@ class DocumentIngestionRepository:
             .values(
                 status=DocumentStatus.READY.value,
                 error_message=None,
-                qdrant_synced_at=now,
+                qdrant_synced_at=aware_now,
                 page_count=page_count,
                 chunk_count=chunk_count,
             )

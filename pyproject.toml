@@ -28,3 +28,10 @@ dependencies = [
   "openai>=1.0.0",
   "tenacity>=8.2.0",
 ]
+
+[dependency-groups]
+dev = [
+  "black>=24.0.0",
+  "flake8>=7.0.0",
+  "pre-commit>=3.6.0",
+]

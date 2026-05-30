@@ -19,19 +19,24 @@ def upgrade() -> None:
     op.execute("UPDATE documents SET status = 'pending' WHERE status = 'uploading'")
     op.drop_constraint("ck_documents_status", "documents", type_="check")
     op.create_check_constraint(
-        "ck_documents_status", "documents", "status IN ('pending','processing','ready','failed')"
+        "ck_documents_status",
+        "documents",
+        "status IN ('pending','processing','ready','failed')",
     )
     op.add_column("documents", sa.Column("page_count", sa.Integer(), nullable=True))
     op.add_column("documents", sa.Column("chunk_count", sa.Integer(), nullable=True))
     op.add_column(
-        "documents", sa.Column("qdrant_synced_at", sa.DateTime(timezone=True), nullable=True)
+        "documents",
+        sa.Column("qdrant_synced_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.add_column("documents", sa.Column("retention_note", sa.Text(), nullable=True))
     op.add_column(
-        "documents", sa.Column("retry_count", sa.Integer(), nullable=False, server_default="0")
+        "documents",
+        sa.Column("retry_count", sa.Integer(), nullable=False, server_default="0"),
     )
     op.add_column(
-        "documents", sa.Column("last_retry_at", sa.DateTime(timezone=True), nullable=True)
+        "documents",
+        sa.Column("last_retry_at", sa.DateTime(timezone=True), nullable=True),
     )
 
     op.create_table(
@@ -48,7 +53,10 @@ def upgrade() -> None:
         sa.Column("embedding_model", sa.String(length=120), nullable=False),
         sa.Column("embedded_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
@@ -67,13 +75,17 @@ def upgrade() -> None:
         ["document_id", "page", "chunk_index"],
     )
     op.create_index(
-        "ix_document_chunks_document_embedded", "document_chunks", ["document_id", "embedded_at"]
+        "ix_document_chunks_document_embedded",
+        "document_chunks",
+        ["document_id", "embedded_at"],
     )
 
 
 def downgrade() -> None:
     op.drop_index("ix_document_chunks_document_embedded", table_name="document_chunks")
-    op.drop_index("ix_document_chunks_document_page_chunk", table_name="document_chunks")
+    op.drop_index(
+        "ix_document_chunks_document_page_chunk", table_name="document_chunks"
+    )
     op.drop_table("document_chunks")
 
     op.drop_column("documents", "last_retry_at")
@@ -84,6 +96,8 @@ def downgrade() -> None:
     op.drop_column("documents", "page_count")
     op.drop_constraint("ck_documents_status", "documents", type_="check")
     op.create_check_constraint(
-        "ck_documents_status", "documents", "status IN ('uploading','processing','ready','failed')"
+        "ck_documents_status",
+        "documents",
+        "status IN ('uploading','processing','ready','failed')",
     )
     op.execute("UPDATE documents SET status = 'uploading' WHERE status = 'pending'")

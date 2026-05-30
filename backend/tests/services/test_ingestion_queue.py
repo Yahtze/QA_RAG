@@ -3,7 +3,9 @@ from uuid import uuid4
 import pytest
 
 from app.services.ingestion_queue import (
-    CeleryIngestionQueue, EnqueueIngestionError, FakeIngestionQueue
+    CeleryIngestionQueue,
+    EnqueueIngestionError,
+    FakeIngestionQueue,
 )
 
 

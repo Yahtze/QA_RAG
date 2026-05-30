@@ -8,6 +8,7 @@ WORKDIR /app/backend
 RUN pip install --no-cache-dir uv
 
 COPY backend/pyproject.toml ./pyproject.toml
+COPY backend/app ./app
 RUN uv pip install --system .
 
 COPY backend ./

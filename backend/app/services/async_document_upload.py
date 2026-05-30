@@ -17,7 +17,9 @@ ENQUEUE_FAILURE_MESSAGE = "Failed to enqueue ingestion task."
 
 
 class AsyncDocumentUpload:
-    def __init__(self, *, session: AsyncSession, settings: Settings, queue: IngestionQueue):
+    def __init__(
+        self, *, session: AsyncSession, settings: Settings, queue: IngestionQueue
+    ):
         self.session = session
         self.settings = settings
         self.queue = queue
@@ -42,9 +44,15 @@ class AsyncDocumentUpload:
         )
         await self.repo.commit()
         try:
-            logger.info("api_ingestion_enqueue_requested", extra={"document_id": str(document.id)})
+            logger.info(
+                "api_ingestion_enqueue_requested",
+                extra={"document_id": str(document.id)},
+            )
             await self.queue.enqueue_document_ingestion(document.id)
-            logger.info("api_ingestion_enqueue_succeeded", extra={"document_id": str(document.id)})
+            logger.info(
+                "api_ingestion_enqueue_succeeded",
+                extra={"document_id": str(document.id)},
+            )
         except EnqueueIngestionError:
             logger.exception(
                 "api_ingestion_enqueue_failed", extra={"document_id": str(document.id)}

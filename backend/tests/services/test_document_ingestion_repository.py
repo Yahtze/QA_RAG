@@ -47,11 +47,16 @@ async def test_replace_chunks_and_mark_ready(db_session):
     assert doc.chunk_count == 1
     assert doc.qdrant_synced_at is not None
     db_chunks = (
-        (await db_session.execute(select(DocumentChunk).where(DocumentChunk.document_id == doc.id)))
+        (
+            await db_session.execute(
+                select(DocumentChunk).where(DocumentChunk.document_id == doc.id)
+            )
+        )
         .scalars()
         .all()
     )
     assert all(c.embedded_at is not None for c in db_chunks)
+    assert all(c.embedded_at.tzinfo is None for c in db_chunks)
 
 
 @pytest.mark.asyncio

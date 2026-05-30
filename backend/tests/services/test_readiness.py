@@ -40,7 +40,9 @@ async def test_readiness_ok(monkeypatch, settings):
 
 
 @pytest.mark.asyncio
-async def test_readiness_skips_redis_when_async_ingestion_disabled(settings, monkeypatch):
+async def test_readiness_skips_redis_when_async_ingestion_disabled(
+    settings, monkeypatch
+):
     settings.USE_ASYNC_INGESTION = False
     called = {"redis": False}
 
@@ -50,11 +52,13 @@ async def test_readiness_skips_redis_when_async_ingestion_disabled(settings, mon
     monkeypatch.setattr("app.services.readiness.ping_redis", fake_ping)
 
     class Q:
-        def __init__(self, settings): pass
-        async def ensure_collection(self): pass
+        def __init__(self, settings):
+            pass
+
+        async def ensure_collection(self):
+            pass
 
     monkeypatch.setattr("app.services.readiness.QdrantCollectionService", Q)
-
 
     class FakeConn:
         async def execute(self, _):
@@ -63,6 +67,7 @@ async def test_readiness_skips_redis_when_async_ingestion_disabled(settings, mon
     class FakeCtx:
         async def __aenter__(self):
             return FakeConn()
+
         async def __aexit__(self, *args):
             return None
 

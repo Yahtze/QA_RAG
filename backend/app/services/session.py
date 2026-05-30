@@ -32,7 +32,9 @@ class SessionService:
 
     async def register(self, data: UserCreate) -> TokenResponse:
         email = data.email.lower().strip()
-        user = User(email=email, hashed_password=hash_password(data.password), name=data.name)
+        user = User(
+            email=email, hashed_password=hash_password(data.password), name=data.name
+        )
         self.session.add(user)
         try:
             await self.session.commit()

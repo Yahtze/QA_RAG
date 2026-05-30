@@ -21,6 +21,17 @@ make docker-up
 
 Services: frontend, backend, migrate, postgres, redis, qdrant.
 
+## Full stack with Docker hot reload
+
+```bash
+make docker-dev-up
+```
+
+Hot reload mode:
+- Frontend runs Vite on `http://localhost:5173` with source bind mount.
+- Backend runs Uvicorn `--reload` on `http://localhost:8000` with backend bind mount.
+- Worker shares same backend/storage volume and code mount for local edits.
+
 ## API
 
 - Base: `/api/v1`

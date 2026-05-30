@@ -25,7 +25,9 @@ class ChunkRecord:
 def make_point_id(
     document_id: UUID, page: int, chunk_index: int, char_start: int, char_end: int
 ) -> UUID:
-    return uuid.uuid5(APP_NAMESPACE, f"{document_id}:{page}:{chunk_index}:{char_start}:{char_end}")
+    return uuid.uuid5(
+        APP_NAMESPACE, f"{document_id}:{page}:{chunk_index}:{char_start}:{char_end}"
+    )
 
 
 def text_hash(text: str) -> str:

@@ -23,7 +23,9 @@ class ForbiddenError(Exception): ...
 
 
 class DocumentPipelineService:
-    def __init__(self, session: AsyncSession, storage, ingestion_service=None, vector_store=None):
+    def __init__(
+        self, session: AsyncSession, storage, ingestion_service=None, vector_store=None
+    ):
         self.session = session
         self.storage = storage
         self.ingestion_service = ingestion_service
@@ -32,7 +34,9 @@ class DocumentPipelineService:
     async def upload(self, *, user: User, upload_file: UploadFile) -> DocumentOut:
         if self.ingestion_service is None:
             raise RuntimeError("ingestion_service is required for upload")
-        return await self.ingestion_service.ingest_upload(user=user, upload_file=upload_file)
+        return await self.ingestion_service.ingest_upload(
+            user=user, upload_file=upload_file
+        )
 
     async def list(self, *, user: User, cursor: str | None, limit: int | None):
         lim = normalize_limit(limit)
@@ -45,12 +49,16 @@ class DocumentPipelineService:
         items = list((await self.session.execute(q)).scalars().all())
         out = [DocumentOut.model_validate(x, from_attributes=True) for x in items]
         return page_from_items(
-            out, lim, lambda d: type("C", (), {"created_at": d.created_at, "id": d.id})()
+            out,
+            lim,
+            lambda d: type("C", (), {"created_at": d.created_at, "id": d.id})(),
         )
 
     async def get(self, *, user: User, document_id):
         doc = (
-            await self.session.execute(select(Document).where(Document.id == document_id))
+            await self.session.execute(
+                select(Document).where(Document.id == document_id)
+            )
         ).scalar_one_or_none()
         if not doc:
             raise NotFoundError
@@ -60,7 +68,9 @@ class DocumentPipelineService:
 
     async def delete(self, *, user: User, document_id):
         doc = (
-            await self.session.execute(select(Document).where(Document.id == document_id))
+            await self.session.execute(
+                select(Document).where(Document.id == document_id)
+            )
         ).scalar_one_or_none()
         if not doc:
             raise NotFoundError

@@ -11,7 +11,9 @@ class User(Base, UUIDMixin, TimestampMixin):
     hashed_password: Mapped[str] = mapped_column(String(255))
     name: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
-    documents = relationship("Document", back_populates="user", cascade="all, delete-orphan")
+    documents = relationship(
+        "Document", back_populates="user", cascade="all, delete-orphan"
+    )
     conversations = relationship(
         "Conversation", back_populates="user", cascade="all, delete-orphan"
     )

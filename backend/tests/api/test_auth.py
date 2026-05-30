@@ -21,6 +21,8 @@ async def test_register_login_me_flow(async_client):
     assert login.status_code == 200
     token = login.json()["access_token"]
 
-    me = await async_client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    me = await async_client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+    )
     assert me.status_code == 200
     assert me.json()["email"] == "user@example.com"

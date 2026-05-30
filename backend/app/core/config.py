@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     CELERY_TASK_IGNORE_RESULT: bool = True
     CELERY_WORKER_CONCURRENCY: int = Field(default=1, ge=1)
     CELERY_MAX_TASKS_PER_CHILD: int = Field(default=50, ge=1)
+    RETRIEVAL_BM25_TOP_K: int = Field(default=20, ge=1)
+    RETRIEVAL_SEMANTIC_TOP_K: int = Field(default=20, ge=1)
+    RETRIEVAL_FINAL_TOP_K: int = Field(default=8, ge=1)
+    CONTEXT_MAX_CHARS: int = Field(default=12_000, ge=1)
+    LLM_BASE_URL: str | None = None
+    LLM_API_KEY: SecretStr | None = None
+    LLM_MODEL: str = "gpt-4o-mini"
 
     @field_validator("ENVIRONMENT")
     @classmethod
@@ -48,6 +55,14 @@ class Settings(BaseSettings):
         stripped = str(value).strip()
         return stripped or None
 
+    @field_validator("LLM_BASE_URL", mode="before")
+    @classmethod
+    def normalize_llm_base_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = str(value).strip()
+        return stripped or None
+
     @computed_field
     @property
     def cors_origins(self) -> list[str]:
@@ -56,7 +71,11 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def storage_root_path(self) -> Path:
-        return Path(self.STORAGE_ROOT).expanduser().resolve()
+        root = Path(self.STORAGE_ROOT).expanduser()
+        if root.is_absolute():
+            return root.resolve()
+        project_root = Path(__file__).resolve().parents[3]
+        return (project_root / root).resolve()
 
     @computed_field
     @property
@@ -73,14 +92,29 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT not in {"local", "development", "test"} and (
             not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY == DEFAULT_DEV_SECRET
         ):
-            raise ValueError("JWT_SECRET_KEY must be set to a non-default value outside local/test")
+            raise ValueError(
+                "JWT_SECRET_KEY must be set to a non-default value outside local/test"
+            )
         if self.CHUNK_OVERLAP_CHARS >= self.CHUNK_SIZE_CHARS:
             raise ValueError("CHUNK_OVERLAP_CHARS must be less than CHUNK_SIZE_CHARS")
         if self.CELERY_BROKER_URL is None:
             self.CELERY_BROKER_URL = self.REDIS_URL
         if self.CELERY_RESULT_BACKEND is None:
             self.CELERY_RESULT_BACKEND = self.REDIS_URL
+        if (
+            self.RETRIEVAL_FINAL_TOP_K
+            > self.RETRIEVAL_BM25_TOP_K + self.RETRIEVAL_SEMANTIC_TOP_K
+        ):
+            raise ValueError(
+                "RETRIEVAL_FINAL_TOP_K cannot exceed retrieval candidate pool"
+            )
         return self
+
+    def validate_llm_config(self) -> None:
+        if self.LLM_API_KEY is None:
+            raise ValueError("LLM_API_KEY is required")
+        if not self.LLM_MODEL.strip():
+            raise ValueError("LLM_MODEL is required")
 
 
 @lru_cache

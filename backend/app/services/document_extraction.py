@@ -28,7 +28,9 @@ def normalize_page_text(text: str) -> str:
     return text.strip()
 
 
-async def extract_document(*, filename: str, content_type: str, data: bytes) -> ExtractedDocument:
+async def extract_document(
+    *, filename: str, content_type: str, data: bytes
+) -> ExtractedDocument:
     suffix = filename.lower().rsplit(".", 1)[-1]
     if content_type == "application/pdf" or suffix == "pdf":
         return _extract_pdf(data)
@@ -43,7 +45,8 @@ def _extract_pdf(data: bytes) -> ExtractedDocument:
     try:
         with fitz.open(stream=data, filetype="pdf") as pdf:
             pages = [
-                (i + 1, normalize_page_text(page.get_text("text"))) for i, page in enumerate(pdf)
+                (i + 1, normalize_page_text(page.get_text("text")))
+                for i, page in enumerate(pdf)
             ]
             return ExtractedDocument(pages=pages, page_count=len(pages))
     except Exception as exc:

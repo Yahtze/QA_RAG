@@ -34,7 +34,9 @@ def normalize_limit(limit: int | None, default: int = 20, maximum: int = 100) ->
 
 
 def encode_cursor(cursor: Cursor) -> str:
-    raw = json.dumps({"created_at": cursor.created_at.isoformat(), "id": str(cursor.id)})
+    raw = json.dumps(
+        {"created_at": cursor.created_at.isoformat(), "id": str(cursor.id)}
+    )
     return base64.urlsafe_b64encode(raw.encode()).decode()
 
 
@@ -43,7 +45,9 @@ def decode_cursor(raw: str | None) -> Cursor | None:
         return None
     try:
         data = json.loads(base64.urlsafe_b64decode(raw.encode()).decode())
-        return Cursor(created_at=datetime.fromisoformat(data["created_at"]), id=UUID(data["id"]))
+        return Cursor(
+            created_at=datetime.fromisoformat(data["created_at"]), id=UUID(data["id"])
+        )
     except Exception as exc:
         raise ValueError("invalid cursor") from exc
 
@@ -62,7 +66,11 @@ def page_from_items(
 ) -> CursorPage[T]:
     has_more = len(items) > limit
     page_items = items[:limit]
-    next_cursor = encode_cursor(cursor_factory(page_items[-1])) if has_more and page_items else None
+    next_cursor = (
+        encode_cursor(cursor_factory(page_items[-1]))
+        if has_more and page_items
+        else None
+    )
     return CursorPage(
         items=page_items, page_info=PageInfo(next_cursor=next_cursor, has_more=has_more)
     )

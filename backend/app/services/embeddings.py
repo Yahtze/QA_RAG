@@ -5,7 +5,10 @@ from openai import APIConnectionError, APIStatusError, AsyncOpenAI, RateLimitErr
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.core.config import Settings
-from app.services.ingestion_errors import DeterministicIngestionError, RetryableIngestionError
+from app.services.ingestion_errors import (
+    DeterministicIngestionError,
+    RetryableIngestionError,
+)
 
 
 class EmbeddingProvider(Protocol):
@@ -15,9 +18,13 @@ class EmbeddingProvider(Protocol):
 class EmbeddingValidationError(Exception): ...
 
 
-def validate_embeddings(*, texts: list[str], vectors: list[list[float]], dimension: int) -> None:
+def validate_embeddings(
+    *, texts: list[str], vectors: list[list[float]], dimension: int
+) -> None:
     if len(vectors) != len(texts):
-        raise EmbeddingValidationError(f"returned {len(vectors)} vectors for {len(texts)} texts")
+        raise EmbeddingValidationError(
+            f"returned {len(vectors)} vectors for {len(texts)} texts"
+        )
     for i, vector in enumerate(vectors):
         if len(vector) != dimension:
             raise EmbeddingValidationError(
@@ -59,7 +66,9 @@ class OpenAIEmbeddingProvider:
         vectors: list[list[float]] = []
         try:
             for start in range(0, len(texts), self.batch_size):
-                vectors.extend(await self._embed_batch(texts[start : start + self.batch_size]))
+                vectors.extend(
+                    await self._embed_batch(texts[start : start + self.batch_size])
+                )
             validate_embeddings(texts=texts, vectors=vectors, dimension=self.dimension)
             return vectors
         except (RateLimitError, APIConnectionError) as exc:
@@ -82,5 +91,7 @@ class FakeEmbeddingProvider:
         vectors = []
         for text in texts:
             digest = sha256(text.encode()).digest()
-            vectors.append([digest[i % len(digest)] / 255 for i in range(self.dimension)])
+            vectors.append(
+                [digest[i % len(digest)] / 255 for i in range(self.dimension)]
+            )
         return vectors

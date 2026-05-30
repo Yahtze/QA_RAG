@@ -6,7 +6,11 @@ from app.core.config import Settings
 from app.db.session import get_db_session
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.user import UserCreate, UserOut
-from app.services.session import DuplicateEmailError, InvalidCredentialsError, SessionService
+from app.services.session import (
+    DuplicateEmailError,
+    InvalidCredentialsError,
+    SessionService,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

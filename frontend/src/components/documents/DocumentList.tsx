@@ -8,7 +8,14 @@ export function DocumentList() {
     <ScrollArea className="h-[420px] pr-3">
       <div className="space-y-3">
         {pipeline.documents.map((document) => (
-          <DocumentCard key={document.id} document={document} isActive={pipeline.activeDocument?.id === document.id} onSelect={() => pipeline.selectDocument(document.id)} onRetry={() => void pipeline.retry(document.id)} />
+          <DocumentCard
+            key={document.id}
+            document={document}
+            isActive={pipeline.activeDocument?.id === document.id}
+            onSelect={() => pipeline.selectDocument(document.id)}
+            onRetry={() => void pipeline.retry(document.id)}
+            onDelete={() => void pipeline.remove(document.id)}
+          />
         ))}
       </div>
     </ScrollArea>

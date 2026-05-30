@@ -12,7 +12,9 @@ from app.core.config import Settings
 from app.services.chunking import ChunkRecord
 from app.services.qdrant_collection import QdrantCollectionService
 from app.services.ingestion_errors import (
-    DeterministicIngestionError, IngestionError, RetryableIngestionError
+    DeterministicIngestionError,
+    IngestionError,
+    RetryableIngestionError,
 )
 
 DocumentChunkForVector = ChunkRecord
@@ -39,7 +41,11 @@ class VectorStore(Protocol):
     async def delete_document_points(self, document_id: UUID) -> None: ...
 
     async def upsert_chunks(
-        self, *, user_id: UUID, chunks: list[DocumentChunkForVector], vectors: list[list[float]]
+        self,
+        *,
+        user_id: UUID,
+        chunks: list[DocumentChunkForVector],
+        vectors: list[list[float]],
     ) -> None: ...
 
 
@@ -81,7 +87,11 @@ class QdrantVectorStore:
     )
     async def _delete_document_points_raw(self, document_id: UUID) -> None:
         flt = qm.Filter(
-            must=[qm.FieldCondition(key="document_id", match=qm.MatchValue(value=str(document_id)))]
+            must=[
+                qm.FieldCondition(
+                    key="document_id", match=qm.MatchValue(value=str(document_id))
+                )
+            ]
         )
         await self.client.delete(
             collection_name=self.settings.QDRANT_COLLECTION_NAME,
@@ -103,11 +113,17 @@ class QdrantVectorStore:
         reraise=True,
     )
     async def _upsert_chunks_raw(
-        self, *, user_id: UUID, chunks: list[DocumentChunkForVector], vectors: list[list[float]]
+        self,
+        *,
+        user_id: UUID,
+        chunks: list[DocumentChunkForVector],
+        vectors: list[list[float]],
     ) -> None:
         points = [
             qm.PointStruct(
-                id=str(chunk.id), vector=vector, payload=build_payload(user_id=user_id, chunk=chunk)
+                id=str(chunk.id),
+                vector=vector,
+                payload=build_payload(user_id=user_id, chunk=chunk),
             )
             for chunk, vector in zip(chunks, vectors, strict=True)
         ]
@@ -117,10 +133,16 @@ class QdrantVectorStore:
             )
 
     async def upsert_chunks(
-        self, *, user_id: UUID, chunks: list[DocumentChunkForVector], vectors: list[list[float]]
+        self,
+        *,
+        user_id: UUID,
+        chunks: list[DocumentChunkForVector],
+        vectors: list[list[float]],
     ) -> None:
         try:
-            await self._upsert_chunks_raw(user_id=user_id, chunks=chunks, vectors=vectors)
+            await self._upsert_chunks_raw(
+                user_id=user_id, chunks=chunks, vectors=vectors
+            )
         except (RetryableIngestionError, DeterministicIngestionError):
             raise
         except (ResponseHandlingException, UnexpectedResponse) as exc:

@@ -53,16 +53,22 @@ class IngestionReconciliationService:
         self.repo = DocumentIngestionRepository(session)
         self.ingestion_service = ingestion_service
 
-    async def list_stale_processing(self, stale_after_minutes: int = 10) -> list[StaleDocument]:
+    async def list_stale_processing(
+        self, stale_after_minutes: int = 10
+    ) -> list[StaleDocument]:
         cutoff = datetime.now(UTC) - timedelta(minutes=stale_after_minutes)
         docs = (
-            await self.session.execute(
-                select(Document).where(
-                    Document.status == DocumentStatus.PROCESSING.value,
-                    Document.updated_at < cutoff,
+            (
+                await self.session.execute(
+                    select(Document).where(
+                        Document.status == DocumentStatus.PROCESSING.value,
+                        Document.updated_at < cutoff,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         now = datetime.now(UTC)
         return [
             StaleDocument(
@@ -79,10 +85,16 @@ class IngestionReconciliationService:
             raise ValueError("document not found")
 
         chunks = (
-            await self.session.execute(
-                select(DocumentChunk).where(DocumentChunk.document_id == document_id)
+            (
+                await self.session.execute(
+                    select(DocumentChunk).where(
+                        DocumentChunk.document_id == document_id
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         if document.qdrant_synced_at and document.status != DocumentStatus.READY.value:
             return RecoveryPlan(
@@ -123,7 +135,9 @@ class IngestionReconciliationService:
                 page_count=max((chunk.page for chunk in chunks), default=0),
                 chunk_count=len(chunks),
             )
-            return RecoveryResult(document_id=plan.document_id, action=plan.action, applied=True)
+            return RecoveryResult(
+                document_id=plan.document_id, action=plan.action, applied=True
+            )
 
         if plan.action == RecoveryAction.MARK_FAILED:
             await self.repo.mark_failed(
@@ -131,10 +145,19 @@ class IngestionReconciliationService:
                 error_message="Marked failed during ingestion reconciliation.",
                 phase=IngestionPhase.DATABASE,
             )
-            return RecoveryResult(document_id=plan.document_id, action=plan.action, applied=True)
+            return RecoveryResult(
+                document_id=plan.document_id, action=plan.action, applied=True
+            )
 
-        if plan.action == RecoveryAction.FULL_REINGEST and self.ingestion_service is not None:
+        if (
+            plan.action == RecoveryAction.FULL_REINGEST
+            and self.ingestion_service is not None
+        ):
             await self.ingestion_service.ingest_document(plan.document_id)
-            return RecoveryResult(document_id=plan.document_id, action=plan.action, applied=True)
+            return RecoveryResult(
+                document_id=plan.document_id, action=plan.action, applied=True
+            )
 
-        return RecoveryResult(document_id=plan.document_id, action=plan.action, applied=False)
+        return RecoveryResult(
+            document_id=plan.document_id, action=plan.action, applied=False
+        )

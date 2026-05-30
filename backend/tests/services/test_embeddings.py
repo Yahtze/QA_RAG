@@ -15,10 +15,14 @@ async def test_fake_embedder_is_deterministic_and_dimensioned():
 
 
 def test_validate_embeddings_count_mismatch():
-    with pytest.raises(EmbeddingValidationError, match="returned 1 vectors for 2 texts"):
+    with pytest.raises(
+        EmbeddingValidationError, match="returned 1 vectors for 2 texts"
+    ):
         validate_embeddings(texts=["a", "b"], vectors=[[0.1]], dimension=1)
 
 
 def test_validate_embeddings_dimension_mismatch():
-    with pytest.raises(EmbeddingValidationError, match="vector 0 has dimension 2; expected 3"):
+    with pytest.raises(
+        EmbeddingValidationError, match="vector 0 has dimension 2; expected 3"
+    ):
         validate_embeddings(texts=["a"], vectors=[[0.1, 0.2]], dimension=3)

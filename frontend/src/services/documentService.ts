@@ -6,14 +6,20 @@ export interface DocumentOut {
   filename: string
   content_type: string
   size_bytes: number
-  status: 'uploading' | 'processing' | 'ready' | 'failed'
+  status: 'pending' | 'uploading' | 'processing' | 'ready' | 'failed'
   error_message: string | null
   created_at: string
   updated_at: string
 }
 
+interface CursorPage<T> {
+  items: T[]
+  page_info: { next_cursor: string | null; has_more: boolean }
+}
+
 export function mapDocument(doc: DocumentOut): RagDocument {
   const progressMap: Record<DocumentOut['status'], number> = {
+    pending: 10,
     uploading: 35,
     processing: 65,
     ready: 100,
@@ -21,6 +27,7 @@ export function mapDocument(doc: DocumentOut): RagDocument {
   }
 
   const summaryMap: Record<DocumentOut['status'], string> = {
+    pending: 'Queued for processing...',
     uploading: 'Uploading document...',
     processing: 'Processing document...',
     ready: 'Document ready for questions.',
@@ -41,8 +48,36 @@ export function mapDocument(doc: DocumentOut): RagDocument {
 }
 
 export async function listDocuments(): Promise<RagDocument[]> {
-  const docs = await apiRequest<DocumentOut[]>('/documents')
-  return docs.map(mapDocument)
+  const page = await apiRequest<CursorPage<DocumentOut>>('/documents')
+  return (page.items ?? []).map(mapDocument)
+}
+
+export interface BatchUploadResult {
+  filename: string
+  status: 'accepted' | 'failed'
+  document: RagDocument | null
+  error: string | null
+}
+
+interface BatchUploadItemOut {
+  filename: string
+  status: 'accepted' | 'failed'
+  document: DocumentOut | null
+  error: string | null
+}
+
+interface BatchUploadSummaryOut {
+  total: number
+  accepted: number
+  failed: number
+  results: BatchUploadItemOut[]
+}
+
+export interface BatchUploadSummary {
+  total: number
+  accepted: number
+  failed: number
+  results: BatchUploadResult[]
 }
 
 export async function uploadDocument(file: File): Promise<RagDocument> {
@@ -53,6 +88,27 @@ export async function uploadDocument(file: File): Promise<RagDocument> {
     body: formData,
   })
   return mapDocument(doc)
+}
+
+export async function uploadDocumentsBatch(files: File[]): Promise<BatchUploadSummary> {
+  const formData = new FormData()
+  files.forEach((file) => formData.append('files', file))
+  const summary = await apiRequest<BatchUploadSummaryOut>('/documents/upload-batch', {
+    method: 'POST',
+    body: formData,
+  })
+
+  return {
+    total: summary.total,
+    accepted: summary.accepted,
+    failed: summary.failed,
+    results: summary.results.map((item) => ({
+      filename: item.filename,
+      status: item.status,
+      document: item.document ? mapDocument(item.document) : null,
+      error: item.error,
+    })),
+  }
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {

@@ -1,14 +1,30 @@
-import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
-import { createConversation as createConv, askQuestion as askQ } from '@/services/chatService'
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+
+import { createConversation as createConv } from '@/services/chatService'
+import { streamConversationMessage } from '@/services/conversationStream'
 import type { Citation, Message } from '@/types'
+
 import { useDocumentPipeline } from './DocumentPipelineContext'
 
 interface ConversationValue {
+  conversationId: string | null
   messages: Message[]
   latestCitations: Citation[]
+  activeCitationId: string | null
   isSending: boolean
   send: (query: string) => Promise<void>
   retry: (messageId: string) => Promise<void>
+  activateCitationByLabel: (label: string) => void
+}
+
+function extractCitationLabels(content: string): Set<string> {
+  const labels = new Set<string>()
+  const pattern = /\[(\d+)]/g
+  let match: RegExpExecArray | null = null
+  while ((match = pattern.exec(content)) !== null) {
+    if (match[1]) labels.add(match[1])
+  }
+  return labels
 }
 
 const ConversationContext = createContext<ConversationValue | null>(null)
@@ -25,17 +41,18 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     },
   ])
   const [latestCitations, setLatestCitations] = useState<Citation[]>([])
+  const [activeCitationId, setActiveCitationId] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
-  const conversationIdRef = useRef<string | null>(null)
-  const documentIdRef = useRef<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversationDocumentId, setConversationDocumentId] = useState<string | null>(null)
 
   async function ensureConversation(documentId: string): Promise<string> {
-    if (conversationIdRef.current && documentIdRef.current === documentId) {
-      return conversationIdRef.current
+    if (conversationId && conversationDocumentId === documentId) {
+      return conversationId
     }
     const id = await createConv(documentId)
-    conversationIdRef.current = id
-    documentIdRef.current = documentId
+    setConversationId(id)
+    setConversationDocumentId(documentId)
     return id
   }
 
@@ -46,28 +63,111 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     setIsSending(true)
     setMessages((current) => [
       ...current,
-      { id: `user-${Date.now()}`, role: 'user', content: originalQuery, status: 'sent', createdAt: 'Just now' },
-      { id: loadingId, role: 'assistant', content: 'Searching sources and drafting answer…', status: 'loading', createdAt: 'Just now' },
+      {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: originalQuery,
+        status: 'sent',
+        createdAt: 'Just now',
+      },
+      {
+        id: loadingId,
+        role: 'assistant',
+        content: 'Searching sources and drafting answer…',
+        status: 'loading',
+        createdAt: 'Just now',
+      },
     ])
 
     try {
       const conversationId = await ensureConversation(activeDocument.id)
-      const response = await askQ(conversationId, activeDocument, originalQuery)
-      setLatestCitations(response.citations)
-      setMessages((current) => current.map((message) => message.id === loadingId ? {
-        ...message,
-        content: response.answer,
-        status: 'sent',
-        citations: response.citations,
-      } : message))
+      for await (const event of streamConversationMessage(conversationId, originalQuery)) {
+        if (event.type === 'token') {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === loadingId
+                ? {
+                    ...message,
+                    content:
+                      (message.content === 'Searching sources and drafting answer…'
+                        ? ''
+                        : message.content) + event.value,
+                    status: 'loading',
+                  }
+                : message,
+            ),
+          )
+        } else if (event.type === 'citations') {
+          setMessages((current) => {
+            const loadingMessage = current.find((message) => message.id === loadingId)
+            const usedLabels = extractCitationLabels(loadingMessage?.content ?? '')
+            const rawCitations = Object.entries(event.map)
+              .filter(([label]) => usedLabels.size === 0 || usedLabels.has(label))
+              .map(([label, source]) => ({
+                id: `${source.chunkId}-${label}`,
+                label,
+                chunkId: source.chunkId,
+                documentId: source.docId,
+                documentName: source.filename,
+                page: source.page ?? 1,
+                snippet: source.snippet,
+              }))
+
+            const deduped = Array.from(
+              new Map(rawCitations.map((citation) => [`${citation.chunkId}-${citation.label}`, citation])).values(),
+            )
+
+            setLatestCitations(deduped)
+            setActiveCitationId(deduped[0]?.id ?? null)
+
+            return current.map((message) =>
+              message.id === loadingId ? { ...message, citations: deduped } : message,
+            )
+          })
+        } else if (event.type === 'error') {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === loadingId
+                ? {
+                    ...message,
+                    content: event.message,
+                    status: 'failed',
+                    error: {
+                      message: event.message,
+                      retryable: event.retryable,
+                      originalQuery,
+                    },
+                  }
+                : message,
+            ),
+          )
+        } else if (event.type === 'done') {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === loadingId && message.status !== 'failed'
+                ? { ...message, status: 'sent' }
+                : message,
+            ),
+          )
+        }
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'The assistant could not answer this question.'
-      setMessages((current) => current.map((item) => item.id === loadingId ? {
-        ...item,
-        content: message,
-        status: 'failed',
-        error: { message, retryable: true, originalQuery },
-      } : item))
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'The assistant could not answer this question.'
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === loadingId
+            ? {
+                ...item,
+                content: message,
+                status: 'failed',
+                error: { message, retryable: true, originalQuery },
+              }
+            : item,
+        ),
+      )
     } finally {
       setIsSending(false)
     }
@@ -81,13 +181,36 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     await send(originalQuery)
   }
 
-  const value = useMemo(() => ({ messages, latestCitations, isSending, send, retry }), [messages, latestCitations, isSending, activeDocument])
+  function activateCitationByLabel(label: string) {
+    const match = latestCitations.find((citation) => citation.label === label)
+    if (match) setActiveCitationId(match.id)
+  }
 
-  return <ConversationContext.Provider value={value}>{children}</ConversationContext.Provider>
+  const value = useMemo(
+    () => ({
+      conversationId,
+      messages,
+      latestCitations,
+      activeCitationId,
+      isSending,
+      send,
+      retry,
+      activateCitationByLabel,
+    }),
+    [conversationId, messages, latestCitations, activeCitationId, isSending, activeDocument],
+  )
+
+  return (
+    <ConversationContext.Provider value={value}>
+      {children}
+    </ConversationContext.Provider>
+  )
 }
 
 export function useConversation() {
   const value = useContext(ConversationContext)
-  if (!value) throw new Error('useConversation must be used within ConversationProvider')
+  if (!value) {
+    throw new Error('useConversation must be used within ConversationProvider')
+  }
   return value
 }
