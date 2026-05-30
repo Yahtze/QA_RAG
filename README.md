@@ -22,6 +22,8 @@ A full-stack RAG (Retrieval-Augmented Generation) application. Upload documents,
 │  Vite / nginx │     REST + JWT      │                      │
 └──────────────┘                      ├──────────────────────┤
                                       │  Answer Pipeline     │
+                                      │  ├─ Semantic Cache ◄─┼── Redis vector lookup
+                                      │  │   hit? return ────┤   (bypasses below)
                                       │  ├─ Lexical (BM25)   │
                                       │  ├─ Semantic (Qdrant)│
                                       │  ├─ RRF Fusion       │
