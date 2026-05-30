@@ -1,6 +1,6 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
-import { createConversation as createConv } from '@/services/chatService'
+import { createConversation as createConv, listConversations, listMessages } from '@/services/chatService'
 import { streamConversationMessage } from '@/services/conversationStream'
 import type { Citation, Message } from '@/types'
 
@@ -45,6 +45,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const [isSending, setIsSending] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversationDocumentId, setConversationDocumentId] = useState<string | null>(null)
+  const [isHydrating, setIsHydrating] = useState(false)
 
   async function ensureConversation(documentId: string): Promise<string> {
     if (conversationId && conversationDocumentId === documentId) {
@@ -57,7 +58,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   }
 
   async function send(query: string) {
-    if (!activeDocument || !query.trim()) return
+    if (!activeDocument || !query.trim() || isHydrating) return
     const originalQuery = query.trim()
     const loadingId = `assistant-${Date.now()}`
     setIsSending(true)
@@ -186,18 +187,80 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     if (match) setActiveCitationId(match.id)
   }
 
+  useEffect(() => {
+    if (!activeDocument) return
+    const activeDocumentId = activeDocument.id
+    let cancelled = false
+
+    async function hydrateConversation() {
+      setIsHydrating(true)
+      try {
+        const conversations = await listConversations()
+        const latestForDocument = conversations
+          .filter((conv) => conv.document_id === activeDocumentId)
+          .at(-1)
+
+        if (!latestForDocument) {
+          if (!cancelled) {
+            setConversationId(null)
+            setConversationDocumentId(null)
+            setMessages([
+              {
+                id: 'assistant-welcome',
+                role: 'assistant',
+                content: 'Select a ready document and ask a question. I will return a grounded answer with citations.',
+                status: 'sent',
+                createdAt: 'Just now',
+              },
+            ])
+            setLatestCitations([])
+            setActiveCitationId(null)
+          }
+          return
+        }
+
+        const history = await listMessages(latestForDocument.id)
+        if (!cancelled) {
+          setConversationId(latestForDocument.id)
+          setConversationDocumentId(activeDocumentId)
+          setMessages(history.length > 0 ? history : [
+            {
+              id: 'assistant-welcome',
+              role: 'assistant',
+              content: 'Select a ready document and ask a question. I will return a grounded answer with citations.',
+              status: 'sent',
+              createdAt: 'Just now',
+            },
+          ])
+          const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant')
+          setLatestCitations(lastAssistant?.citations ?? [])
+          setActiveCitationId(lastAssistant?.citations?.[0]?.id ?? null)
+        }
+      } catch {
+        // fail silently
+      } finally {
+        if (!cancelled) setIsHydrating(false)
+      }
+    }
+
+    void hydrateConversation()
+    return () => {
+      cancelled = true
+    }
+  }, [activeDocument?.id])
+
   const value = useMemo(
     () => ({
       conversationId,
       messages,
       latestCitations,
       activeCitationId,
-      isSending,
+      isSending: isSending || isHydrating,
       send,
       retry,
       activateCitationByLabel,
     }),
-    [conversationId, messages, latestCitations, activeCitationId, isSending, activeDocument],
+    [conversationId, messages, latestCitations, activeCitationId, isSending, isHydrating, activeDocument],
   )
 
   return (

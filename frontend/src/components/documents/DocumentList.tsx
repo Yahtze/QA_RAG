@@ -11,8 +11,6 @@ export function DocumentList() {
           <DocumentCard
             key={document.id}
             document={document}
-            isActive={pipeline.activeDocument?.id === document.id}
-            onSelect={() => pipeline.selectDocument(document.id)}
             onRetry={() => void pipeline.retry(document.id)}
             onDelete={() => void pipeline.remove(document.id)}
           />

@@ -1,7 +1,40 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
 import * as authService from '@/services/authService'
 import { setAuthTokenProvider } from '@/services/apiClient'
 import type { User } from '@/types'
+
+const SESSION_STORAGE_KEY = 'qa-rag:session'
+
+interface StoredSession {
+  token: string
+  user: User | null
+}
+
+function readStoredSession(): StoredSession | null {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return null
+    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<StoredSession>
+    if (!parsed.token || typeof parsed.token !== 'string') return null
+    return { token: parsed.token, user: parsed.user ?? null }
+  } catch {
+    return null
+  }
+}
+
+function writeStoredSession(session: StoredSession | null): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    if (!session) {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY)
+      return
+    }
+    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
+  } catch {
+    // no-op
+  }
+}
 
 interface SessionContextValue {
   user: User | null
@@ -16,8 +49,8 @@ interface SessionContextValue {
 const SessionContext = createContext<SessionContextValue | null>(null)
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(null)
-  const [user, setUser] = useState<User | null>(null)
+  const [token, setToken] = useState<string | null>(() => readStoredSession()?.token ?? null)
+  const [user, setUser] = useState<User | null>(() => readStoredSession()?.user ?? null)
 
   const value = useMemo<SessionContextValue>(() => ({
     user,
@@ -42,10 +75,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     },
   }), [token, user])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setAuthTokenProvider(() => token)
     return () => setAuthTokenProvider(null)
   }, [token])
+
+  useEffect(() => {
+    writeStoredSession(token ? { token, user } : null)
+  }, [token, user])
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
 }

@@ -1,7 +1,23 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionProvider, useSession } from '../SessionContext'
+
+function mockStorage() {
+  const store = new Map<string, string>()
+  return {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value)
+    },
+    removeItem: (key: string) => {
+      store.delete(key)
+    },
+    clear: () => {
+      store.clear()
+    },
+  }
+}
 
 function Probe() {
   const session = useSession()
@@ -15,7 +31,36 @@ function Probe() {
 }
 
 describe('Session module', () => {
-  afterEach(() => vi.restoreAllMocks())
+  beforeEach(() => {
+    Object.defineProperty(window, 'localStorage', {
+      value: mockStorage(),
+      configurable: true,
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+  })
+
+  it('restores session from localStorage on refresh', () => {
+    window.localStorage.setItem(
+      'qa-rag:session',
+      JSON.stringify({
+        token: 'stored-token',
+        user: { id: 'user-1', name: 'Demo User', email: 'agent@example.com' },
+      }),
+    )
+
+    render(
+      <SessionProvider>
+        <Probe />
+      </SessionProvider>,
+    )
+
+    expect(screen.getByText('status:authed')).toBeInTheDocument()
+    expect(screen.getByText('redirect:/chat')).toBeInTheDocument()
+  })
 
   it('centralizes guest and authenticated redirects', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(

@@ -15,43 +15,72 @@ export function ManageActiveDocumentsDialog({ documents, conversationId }: Props
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="space-y-2 rounded border p-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">Active documents</p>
-        <Button variant="outline" onClick={() => setOpen((current) => !current)}>
-          {open ? 'Hide' : 'Manage'}
-        </Button>
+    <>
+      <div className="rounded-xl border border-border/70 bg-card/60 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold">Selected Documents</p>
+          <Button variant="outline" onClick={() => setOpen(true)}>
+            Manage
+          </Button>
+        </div>
       </div>
 
       {open ? (
-        <div className="space-y-2">
-          {documents.map((doc) => {
-            const ready = doc.status === 'ready'
-            const checked = scope.activeDocumentIds.includes(doc.id)
-            return (
-              <button
-                key={doc.id}
-                type="button"
-                disabled={!ready}
-                onClick={() => scope.toggleDocument(doc.id)}
-                className="flex w-full items-center justify-between rounded border p-3 text-left disabled:opacity-50"
-              >
-                <span>{doc.name}</span>
-                <Badge variant={checked ? 'default' : 'secondary'}>
-                  {ready ? (checked ? 'Active' : 'Ready') : doc.status}
-                </Badge>
-              </button>
-            )
-          })}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-border bg-card shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
+              <h3 className="text-base font-semibold">Selected Documents</h3>
+              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+                Close
+              </Button>
+            </div>
 
-          <Button
-            disabled={!conversationId}
-            onClick={() => (conversationId ? void scope.save(conversationId) : undefined)}
-          >
-            Save active documents
-          </Button>
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto px-5 py-4">
+              {documents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>
+              ) : (
+                documents.map((doc) => {
+                  const ready = doc.status === 'ready'
+                  const checked = scope.activeDocumentIds.includes(doc.id)
+                  return (
+                    <button
+                      key={doc.id}
+                      type="button"
+                      disabled={!ready}
+                      onClick={() => scope.toggleDocument(doc.id)}
+                      className="flex w-full items-center justify-between rounded-xl border border-border/70 bg-card/60 px-4 py-3 text-left transition hover:border-primary/60 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{doc.name}</p>
+                        <p className="text-xs text-muted-foreground">{doc.type} · {doc.sizeLabel}</p>
+                      </div>
+                      <Badge variant={checked ? 'default' : 'secondary'}>
+                        {ready ? (checked ? 'Selected' : 'Ready') : doc.status}
+                      </Badge>
+                    </button>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-border/70 px-5 py-4">
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={!conversationId}
+                onClick={async () => {
+                  if (!conversationId) return
+                  await scope.save(conversationId)
+                  setOpen(false)
+                }}
+              >
+                Save Selected Documents
+              </Button>
+            </div>
+          </div>
         </div>
       ) : null}
-    </div>
+    </>
   )
 }
