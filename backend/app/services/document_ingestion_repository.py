@@ -75,11 +75,12 @@ class DocumentIngestionRepository:
     async def mark_ready_after_vector_sync(
         self, document_id: UUID, *, page_count: int, chunk_count: int
     ) -> None:
-        now = datetime.now(UTC)
+        aware_now = datetime.now(UTC)
+        naive_utc_now = aware_now.replace(tzinfo=None)
         await self.session.execute(
             update(DocumentChunk)
             .where(DocumentChunk.document_id == document_id, DocumentChunk.embedded_at.is_(None))
-            .values(embedded_at=now)
+            .values(embedded_at=naive_utc_now)
         )
         await self.session.execute(
             update(Document)
@@ -87,7 +88,7 @@ class DocumentIngestionRepository:
             .values(
                 status=DocumentStatus.READY.value,
                 error_message=None,
-                qdrant_synced_at=now,
+                qdrant_synced_at=aware_now,
                 page_count=page_count,
                 chunk_count=chunk_count,
             )

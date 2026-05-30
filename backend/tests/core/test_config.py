@@ -70,7 +70,10 @@ def test_llm_config_lazy_validation():
 
 
 def test_ingestion_settings_defaults():
-    settings = _settings()
+    settings = _settings(
+        EMBEDDING_MODEL="text-embedding-3-small",
+        EMBEDDING_BASE_URL=None,
+    )
     assert settings.CHUNK_SIZE_CHARS == 1200
     assert settings.CHUNK_OVERLAP_CHARS == 200
     assert settings.EMBEDDING_MODEL == "text-embedding-3-small"
@@ -107,3 +110,13 @@ def test_async_ingestion_and_celery_defaults():
     assert settings.CELERY_TASK_IGNORE_RESULT is True
     assert settings.CELERY_WORKER_CONCURRENCY == 1
     assert settings.CELERY_MAX_TASKS_PER_CHILD == 50
+
+
+def test_storage_root_relative_resolves_from_project_root():
+    settings = _settings(STORAGE_ROOT="backend/storage")
+    assert str(settings.storage_root_path).endswith("/backend/storage")
+
+
+def test_storage_root_absolute_stays_absolute():
+    settings = _settings(STORAGE_ROOT="/tmp/qa-rag-storage")
+    assert str(settings.storage_root_path).endswith("/tmp/qa-rag-storage")

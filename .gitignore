@@ -26,6 +26,7 @@ frontend/.vite/
 
 # Backend local storage
 backend/storage/
+backend/backend/
 
 # Local databases
 backend_test.db

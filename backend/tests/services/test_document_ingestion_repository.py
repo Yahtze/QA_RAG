@@ -52,6 +52,7 @@ async def test_replace_chunks_and_mark_ready(db_session):
         .all()
     )
     assert all(c.embedded_at is not None for c in db_chunks)
+    assert all(c.embedded_at.tzinfo is None for c in db_chunks)
 
 
 @pytest.mark.asyncio

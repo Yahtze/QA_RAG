@@ -57,6 +57,8 @@ services:
       dockerfile: backend/Dockerfile
     working_dir: /app/backend
     command: celery -A app.worker.celery_app worker -Q ingestion --loglevel=info --concurrency=1 --max-tasks-per-child=50
+    volumes:
+      - storage_data:/app/backend/storage
     environment:
       ENVIRONMENT: local
       DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
@@ -71,10 +73,15 @@ services:
       CELERY_TASK_IGNORE_RESULT: "true"
       CELERY_WORKER_CONCURRENCY: 1
       CELERY_MAX_TASKS_PER_CHILD: 50
-      EMBEDDING_MODEL: text-embedding-3-small
-      EMBEDDING_DIMENSION: 1536
-      STORAGE_ROOT: /app/backend/storage
-      MAX_UPLOAD_BYTES: 52428800
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-1536}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-${OPENAI_API_KEY}}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      STORAGE_ROOT: ${STORAGE_ROOT:-/app/backend/storage}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -90,6 +97,8 @@ services:
     working_dir: /app/backend
     ports:
       - "8000:8000"
+    volumes:
+      - storage_data:/app/backend/storage
     environment:
       ENVIRONMENT: local
       DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
@@ -100,10 +109,15 @@ services:
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION_NAME: documents
-      EMBEDDING_MODEL: text-embedding-3-small
-      EMBEDDING_DIMENSION: 1536
-      STORAGE_ROOT: /app/backend/storage
-      MAX_UPLOAD_BYTES: 52428800
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-1536}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-${OPENAI_API_KEY}}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      STORAGE_ROOT: ${STORAGE_ROOT:-/app/backend/storage}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -115,3 +129,4 @@ services:
 volumes:
   postgres_data:
   qdrant_data:
+  storage_data:

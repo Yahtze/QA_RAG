@@ -30,6 +30,7 @@ class LocalStorageService:
     # Delete only on document delete or explicit cleanup.
     def __init__(self, settings: Settings):
         self.settings = settings
+        self.settings.storage_root_path.mkdir(parents=True, exist_ok=True)
 
     async def store_upload(
         self,

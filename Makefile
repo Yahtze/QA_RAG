@@ -1,4 +1,4 @@
-.PHONY: dev build docker-up docker-down docker-logs lint clean backend-install backend-dev backend-test backend-lint backend-format backend-migrate backend-revision backend-worker
+.PHONY: dev build docker-up docker-dev-up docker-down docker-logs lint clean backend-install backend-dev backend-test backend-lint backend-format backend-migrate backend-revision backend-worker
 
 dev:
 	cd frontend && npm run dev
@@ -8,6 +8,9 @@ build:
 
 docker-up:
 	docker compose up --build
+
+docker-dev-up:
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 
 docker-down:
 	docker compose down
