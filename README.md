@@ -9,7 +9,7 @@ A full-stack RAG (Retrieval-Augmented Generation) application. Upload documents,
 - **Ask questions** against selected documents using a multi-turn conversation interface with full history chaining
 - **Retrieve** relevant context via hybrid search: BM25 full-text (Postgres `tsvector`) + semantic similarity (Qdrant vectors), fused with Reciprocal Rank Fusion (RRF)
 - **Stream answers** from an LLM via SSE with inline citation labels (`[1]`, `[2]`, etc.)
-- **Cite sources** — clickable citation tokens activate source cards showing chunk, document, page, and snippet
+- **Cite sources** — clickable citation tokens activate source cards; clicking any assistant message shows its citations in the Sources panel
 - **Cache** semantically similar queries in Redis with vector similarity matching (RediSearch HNSW index)
 - **Recover** from failed ingestion via a reconciliation CLI that detects stale/missing states and applies fixes
 
@@ -210,7 +210,7 @@ React + TypeScript + Vite with Tailwind CSS and custom UI primitives.
 - **Active document selection**: multi-select dialog controls which docs participate in RAG; selection persists to server and flows into conversation creation
 - **Multi-turn chat**: full conversation history is chained with each LLM call — prior questions, context chunks, and answers are all passed so the model can reference earlier turns
 - **Streaming chat**: real-time token rendering with SSE consumption
-- **Citation interaction**: click `[1]` labels in answers to highlight source cards
+- **Citation interaction**: click any assistant message to view its citations in the Sources panel; click `[1]` labels in answers to highlight specific source cards
 - **Session persistence**: auth + conversation state survives page refresh
 - **New Chat**: resets thread for clean demo flow
 
