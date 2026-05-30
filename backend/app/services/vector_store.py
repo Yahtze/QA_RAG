@@ -74,7 +74,7 @@ class QdrantVectorStore:
     async def ensure_collection(self) -> None:
         try:
             await self.collection_service.ensure_collection()
-        except RetryableIngestionError, DeterministicIngestionError:
+        except (RetryableIngestionError, DeterministicIngestionError):
             raise
         except (ResponseHandlingException, UnexpectedResponse) as exc:
             raise _classify_qdrant_error(exc) from exc
@@ -101,7 +101,7 @@ class QdrantVectorStore:
     async def delete_document_points(self, document_id: UUID) -> None:
         try:
             await self._delete_document_points_raw(document_id)
-        except RetryableIngestionError, DeterministicIngestionError:
+        except (RetryableIngestionError, DeterministicIngestionError):
             raise
         except (ResponseHandlingException, UnexpectedResponse) as exc:
             raise _classify_qdrant_error(exc) from exc
@@ -143,7 +143,7 @@ class QdrantVectorStore:
             await self._upsert_chunks_raw(
                 user_id=user_id, chunks=chunks, vectors=vectors
             )
-        except RetryableIngestionError, DeterministicIngestionError:
+        except (RetryableIngestionError, DeterministicIngestionError):
             raise
         except (ResponseHandlingException, UnexpectedResponse) as exc:
             raise _classify_qdrant_error(exc) from exc
