@@ -29,3 +29,8 @@ backend/storage/
 
 # Local databases
 backend_test.db
+
+# Local env secrets
+.env
+.env.*
+!.env.example
