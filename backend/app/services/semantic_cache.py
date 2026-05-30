@@ -37,7 +37,12 @@ class RedisSemanticCache:
         self._index_ready = False
         self._ensure_lock = asyncio.Lock()
 
-    async def get(self, *, query: str, document_ids: list[str] | None = None) -> SemanticCacheHit | None:
+    async def get(
+        self,
+        *,
+        query: str,
+        document_ids: list[str] | None = None,
+    ) -> SemanticCacheHit | None:
         vector = await self._embed_query(query)
         if vector is None:
             return None
@@ -45,7 +50,7 @@ class RedisSemanticCache:
 
         # Filter by document set hash
         doc_hash = self._hash_document_ids(document_ids)
-        filter_str = f"@document_ids_hash:{{{doc_hash}}}"
+        filter_str = f"(@document_ids_hash:{{{doc_hash}}})"
         query_str = f"{filter_str}=>[KNN 1 @question_embedding $vec AS distance]"
         result = await self.client.execute_command(
             "FT.SEARCH",
@@ -57,9 +62,9 @@ class RedisSemanticCache:
             vector,
             "RETURN",
             "3",
+            "distance",
             "response",
             "citations",
-            "distance",
             "SORTBY",
             "distance",
             "ASC",
@@ -78,23 +83,17 @@ class RedisSemanticCache:
         max_distance = 1 - self.settings.SEMANTIC_CACHE_MIN_SIMILARITY
         if distance > max_distance:
             logger.info(
-                "semantic_cache_lookup",
-                extra={
-                    "hit": False,
-                    "reason": "threshold_exceeded",
-                    "distance": distance,
-                    "max_distance": max_distance,
-                },
+                "semantic_cache_lookup hit=false threshold_exceeded "
+                "distance=%.6f max_distance=%.6f",
+                distance,
+                max_distance,
             )
             return None
 
         logger.info(
-            "semantic_cache_lookup",
-            extra={
-                "hit": True,
-                "distance": distance,
-                "max_distance": max_distance,
-            },
+            "semantic_cache_lookup hit=true distance=%.6f max_distance=%.6f",
+            distance,
+            max_distance,
         )
 
         answer = field_map.get("response", b"").decode()
@@ -131,11 +130,9 @@ class RedisSemanticCache:
         )
         await self.client.expire(key, self.settings.SEMANTIC_CACHE_TTL_SECONDS)
         logger.info(
-            "semantic_cache_write",
-            extra={
-                "key": key,
-                "ttl_seconds": self.settings.SEMANTIC_CACHE_TTL_SECONDS,
-            },
+            "semantic_cache_write key=%s ttl_seconds=%d",
+            key,
+            self.settings.SEMANTIC_CACHE_TTL_SECONDS,
         )
 
     def _hash_document_ids(self, document_ids: list[str] | None) -> str:

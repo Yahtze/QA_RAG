@@ -30,6 +30,25 @@ function extractCitationLabels(content: string): Set<string> {
   return labels
 }
 
+const CONV_SESSION_KEY = 'qa-rag:active-conversation-id'
+
+function readSessionConversationId(): string | null {
+  try {
+    return sessionStorage.getItem(CONV_SESSION_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeSessionConversationId(id: string | null): void {
+  try {
+    if (id) sessionStorage.setItem(CONV_SESSION_KEY, id)
+    else sessionStorage.removeItem(CONV_SESSION_KEY)
+  } catch {
+    // no-op
+  }
+}
+
 const ConversationContext = createContext<ConversationValue | null>(null)
 
 function initialMessages(): Message[] {
@@ -62,6 +81,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     const id = await createConv(documentId, scope.activeDocumentIds)
     setConversationId(id)
     setConversationDocumentId(documentId)
+    writeSessionConversationId(id)
     return id
   }
 
@@ -202,14 +222,25 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     let cancelled = false
 
     async function hydrateConversation() {
+      const persistedId = readSessionConversationId()
+      if (!persistedId) {
+        if (!cancelled) {
+          setConversationId(null)
+          setConversationDocumentId(null)
+          setMessages(initialMessages())
+          setLatestCitations([])
+          setActiveCitationId(null)
+        }
+        return
+      }
+
       setIsHydrating(true)
       try {
         const conversations = await listConversations()
-        const latestForDocument = conversations
-          .filter((conv) => conv.document_id === activeDocumentId)
-          .at(-1)
+        const match = conversations.find((conv) => conv.id === persistedId)
 
-        if (!latestForDocument) {
+        if (!match) {
+          writeSessionConversationId(null)
           if (!cancelled) {
             setConversationId(null)
             setConversationDocumentId(null)
@@ -220,16 +251,17 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
           return
         }
 
-        const history = await listMessages(latestForDocument.id)
+        const history = await listMessages(match.id)
         if (!cancelled) {
-          setConversationId(latestForDocument.id)
-          setConversationDocumentId(activeDocumentId)
+          setConversationId(match.id)
+          setConversationDocumentId(match.document_id ?? activeDocumentId)
           setMessages(history.length > 0 ? history : initialMessages())
           const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant')
           setLatestCitations(lastAssistant?.citations ?? [])
           setActiveCitationId(lastAssistant?.citations?.[0]?.id ?? null)
         }
       } catch {
+        writeSessionConversationId(null)
         // fail silently
       } finally {
         if (!cancelled) setIsHydrating(false)
@@ -248,6 +280,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     setMessages(initialMessages())
     setLatestCitations([])
     setActiveCitationId(null)
+    writeSessionConversationId(null)
   }
 
   async function updateActiveDocumentIds(ids: string[]) {

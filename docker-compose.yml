@@ -44,7 +44,7 @@ services:
       ENVIRONMENT: local
       DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
       ALEMBIC_DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
-      JWT_SECRET_KEY: dev-secret-change-me
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
     depends_on:
@@ -63,7 +63,7 @@ services:
       ENVIRONMENT: local
       DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
       ALEMBIC_DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
-      JWT_SECRET_KEY: dev-secret-change-me
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION_NAME: documents
@@ -109,7 +109,7 @@ services:
       ENVIRONMENT: local
       DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
       ALEMBIC_DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
-      JWT_SECRET_KEY: dev-secret-change-me
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       BACKEND_CORS_ORIGINS: http://localhost:5173,http://localhost:8080
       REDIS_URL: redis://redis:6379/0

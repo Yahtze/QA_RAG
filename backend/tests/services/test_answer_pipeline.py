@@ -51,11 +51,11 @@ class FakeSemanticCache:
         self.get_called = False
         self.set_called = False
 
-    async def get(self, *, query: str):
+    async def get(self, *, query: str, document_ids=None):
         self.get_called = True
         return self.hit
 
-    async def set(self, *, query: str, answer: str, citations: dict):
+    async def set(self, *, query: str, answer: str, citations: dict, document_ids=None):
         self.set_called = True
 
 

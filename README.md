@@ -6,7 +6,7 @@ A full-stack RAG (Retrieval-Augmented Generation) application. Upload documents,
 
 - **Upload** PDF, plain text, and Markdown documents (single or batch)
 - **Ingest** documents asynchronously via Celery: text extraction → chunking → embedding → Qdrant vector index
-- **Ask questions** against selected documents using a conversation interface
+- **Ask questions** against selected documents using a multi-turn conversation interface with full history chaining
 - **Retrieve** relevant context via hybrid search: BM25 full-text (Postgres `tsvector`) + semantic similarity (Qdrant vectors), fused with Reciprocal Rank Fusion (RRF)
 - **Stream answers** from an LLM via SSE with inline citation labels (`[1]`, `[2]`, etc.)
 - **Cite sources** — clickable citation tokens activate source cards showing chunk, document, page, and snippet
@@ -26,6 +26,7 @@ A full-stack RAG (Retrieval-Augmented Generation) application. Upload documents,
                                       │  ├─ Semantic (Qdrant)│
                                       │  ├─ RRF Fusion       │
                                       │  ├─ Context Packer   │
+                                      │  ├─ History Builder  │
                                       │  ├─ Prompt Builder   │
                                       │  ├─ LLM Stream       │
                                       │  └─ Citation Mapper  │
@@ -54,9 +55,9 @@ A full-stack RAG (Retrieval-Augmented Generation) application. Upload documents,
 | **Session** | JWT auth, register/login/me, redirect guard |
 | **Document Pipeline** | Upload → persist file → create DB row → enqueue ingestion |
 | **Ingestion** | Extract text → chunk → embed → index in Qdrant → mark ready/failed |
-| **Conversation Scope** | Per-conversation active document selection; only active docs participate in RAG |
+| **Conversation Scope** | Per-conversation active document selection; only active docs participate in RAG. Selection is wired into conversation creation and can be updated mid-conversation. |
 | **Hybrid Retrieval** | BM25 + semantic search → RRF rank fusion → top-k context |
-| **Answer Pipeline** | Cache check → retrieval → context pack → prompt build → LLM stream → citation map → persist |
+| **Answer Pipeline** | Cache check → retrieval → context pack → prompt build (with conversation history) → LLM stream → citation map → persist |
 | **Semantic Cache** | Redis vector index cache; bypasses retrieval + LLM on high-similarity hit |
 | **Reconciliation** | Detects stale/missing ingestion states; plans and applies recovery actions |
 
@@ -120,7 +121,7 @@ All configuration is via `.env` at the repo root. Copy `.env.example` to start.
 | `DATABASE_URL` | `postgresql+asyncpg://qa_rag:qa_rag@localhost:5432/qa_rag` | Postgres connection |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection |
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant connection |
-| `JWT_SECRET_KEY` | `dev-secret-change-me` | JWT signing secret (change in prod) |
+| `JWT_SECRET_KEY` | `dev-secret-change-me-1234567890ab` | JWT signing secret (min 32 bytes for HS256; change in prod) |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model name |
 | `EMBEDDING_DIMENSION` | `1536` | Embedding vector dimension |
 | `EMBEDDING_BASE_URL` | — | Custom embedding endpoint (OpenRouter, etc.) |
@@ -204,9 +205,10 @@ React + TypeScript + Vite with Tailwind CSS and custom UI primitives.
 
 ### Key Features
 
-- **3-column layout**: document list, chat thread, citation panel (stacked on mobile)
+- **3-column layout**: document list (collapsible), chat thread, citation panel (stacked on mobile)
 - **Document management**: upload (batch), view status, retry failed, delete
-- **Active document selection**: multi-select dialog controls which docs participate in RAG
+- **Active document selection**: multi-select dialog controls which docs participate in RAG; selection persists to server and flows into conversation creation
+- **Multi-turn chat**: full conversation history is chained with each LLM call — prior questions, context chunks, and answers are all passed so the model can reference earlier turns
 - **Streaming chat**: real-time token rendering with SSE consumption
 - **Citation interaction**: click `[1]` labels in answers to highlight source cards
 - **Session persistence**: auth + conversation state survives page refresh
@@ -248,7 +250,7 @@ FastAPI (async) with SQLAlchemy, Alembic, Celery, and deep module seams.
 | `semantic_chunk_search.py` | Qdrant semantic similarity search |
 | `hybrid_retrieval.py` | RRF fusion of BM25 + semantic results |
 | `context_packer.py` | Token/char budget packing |
-| `prompt_builder.py` | Grounded document assistant prompt |
+| `prompt_builder.py` | Grounded document assistant prompt with multi-turn history chaining |
 | `llm_provider.py` | OpenAI-compatible LLM streaming seam |
 | `answer_pipeline.py` | Full RAG orchestration (cache → retrieve → pack → prompt → stream → persist) |
 | `semantic_cache.py` | Redis RediSearch HNSW vector cache |
@@ -370,5 +372,7 @@ QA_RAG/
 - **Chunk text is source of truth in Postgres** — Qdrant holds vectors for similarity search; retrieval joins back to Postgres for text + metadata.
 - **Hard filter parity** — Qdrant semantic filters mirror Postgres lexical filters (user_id, active document IDs, status=ready).
 - **Streaming persistence** — user message persisted before stream starts; assistant message + citations persisted after stream completes. Crash caveat: dangling user message detected on next load with retry prompt.
+- **Multi-turn chaining** — each LLM call receives the full conversation history (user questions + context chunks + assistant answers) with the system prompt at the top. Prior turns' citations are reconstructed from stored citation rows.
+- **Active document scope** — multi-select dialog controls which documents participate in RAG. Selection is persisted per-conversation via `PUT /conversations/{id}/active-documents` and passed when creating new conversations.
 - **Deterministic test doubles** — fake embeddings, fake vector stores, fake LLMs return predictable outputs for reliable CI.
 - **`.env` is source of truth** — Docker Compose reads from `.env` and passes to containers. No hardcoded keys in compose files.

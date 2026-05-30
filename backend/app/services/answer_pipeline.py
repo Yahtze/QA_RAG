@@ -87,7 +87,10 @@ class AnswerPipeline:
         self.session.add(user_message)
         await self.session.commit()
 
-        cache_hit = await self._semantic_cache_get(content, document_ids=[str(d) for d in scope.active_document_ids])
+        cache_hit = await self._semantic_cache_get(
+            content,
+            document_ids=[str(d) for d in scope.active_document_ids],
+        )
         if cache_hit is not None:
             assistant = Message(
                 conversation_id=conversation_id,
@@ -187,9 +190,9 @@ class AnswerPipeline:
         try:
             hit = await self.semantic_cache.get(query=query, document_ids=document_ids)
             if hit is None:
-                logger.info("semantic_cache_pipeline_lookup", extra={"hit": False})
+                logger.info("semantic_cache_pipeline_lookup hit=false")
             else:
-                logger.info("semantic_cache_pipeline_lookup", extra={"hit": True})
+                logger.info("semantic_cache_pipeline_lookup hit=true")
             return hit
         except TimeoutError:
             logger.warning("semantic_cache_pipeline_lookup_fallback reason=timeout")
@@ -220,7 +223,7 @@ class AnswerPipeline:
                     citations=citations,
                     document_ids=document_ids,
                 )
-                logger.info("semantic_cache_pipeline_write", extra={"status": "ok"})
+                logger.info("semantic_cache_pipeline_write status=ok")
             except TimeoutError:
                 logger.warning("semantic_cache_pipeline_write status=timeout")
                 return
