@@ -10,7 +10,7 @@ A full-stack RAG (Retrieval-Augmented Generation) application. Upload documents,
 - **Retrieve** relevant context via hybrid search: BM25 full-text (Postgres `tsvector`) + semantic similarity (Qdrant vectors), fused with Reciprocal Rank Fusion (RRF)
 - **Stream answers** from an LLM via SSE with inline citation labels (`[1]`, `[2]`, etc.)
 - **Cite sources** — clickable citation tokens activate source cards; clicking any assistant message shows its citations in the Sources panel
-- **Cache** semantically similar queries in Redis with vector similarity matching (RediSearch HNSW index)
+- **Cache** semantically similar queries in Redis with vector similarity matching (RediSearch HNSW index); cached answers use Two-Pass Hydration to guarantee fresh, live citations on every hit
 - **Recover** from failed ingestion via a reconciliation CLI that detects stale/missing states and applies fixes
 
 ## Architecture
@@ -23,7 +23,10 @@ A full-stack RAG (Retrieval-Augmented Generation) application. Upload documents,
 └──────────────┘                      ├──────────────────────┤
                                       │  Answer Pipeline     │
                                       │  ├─ Semantic Cache ◄─┼── Redis vector lookup
-                                      │  │   hit? return ────┤   (bypasses below)
+                                      │  │   hit? ───────────┤
+                                      │  │   hydrate ────────┼── Qdrant fetch-by-ID
+                                      │  │   (chunk_ids →    │   + Postgres join
+                                      │  │    fresh metadata)│
                                       │  ├─ Lexical (BM25)   │
                                       │  ├─ Semantic (Qdrant)│
                                       │  ├─ RRF Fusion       │
@@ -59,8 +62,8 @@ A full-stack RAG (Retrieval-Augmented Generation) application. Upload documents,
 | **Ingestion** | Extract text → chunk → embed → index in Qdrant → mark ready/failed |
 | **Conversation Scope** | Per-conversation active document selection; only active docs participate in RAG. Selection is wired into conversation creation and can be updated mid-conversation. |
 | **Hybrid Retrieval** | BM25 + semantic search → RRF rank fusion → top-k context |
-| **Answer Pipeline** | Cache check → retrieval → context pack → prompt build (with conversation history) → LLM stream → citation map → persist |
-| **Semantic Cache** | Redis vector index cache; bypasses retrieval + LLM on high-similarity hit |
+| **Answer Pipeline** | Cache check → (on hit) hydrate citations from live Qdrant + Postgres → retrieval → context pack → prompt build (with conversation history) → LLM stream → citation map → persist |
+| **Semantic Cache** | Redis vector index cache; stores chunk IDs only; on hit, citations are hydrated live from Qdrant + Postgres (Two-Pass Hydration) to guarantee freshness. Falls back to full RAG if hydration fails. |
 | **Reconciliation** | Detects stale/missing ingestion states; plans and applies recovery actions |
 
 ### Ingestion Pipeline
@@ -89,7 +92,13 @@ Store Vectors (Qdrant)
 ```
 Semantic Cache (Redis)
     │
-    ├─ hit → return cached answer
+    ├─ hit → hydrate chunk IDs
+    │         │
+    │         ├─ Qdrant fetch-by-ID (verify chunks exist)
+    │         ├─ Postgres join (fresh filename, page, ACLs)
+    │         │
+    │         ├─ success → return cached answer + fresh citations
+    │         └─ failure → fall through to full RAG
     │
     ▼ miss
 BM25 (Postgres full-text)
@@ -110,7 +119,7 @@ LLM Stream
 Citation Mapper
     │
     ▼
-Persist & Stream to Client
+Persist & Cache (store chunk_ids only) → Stream to Client
 ```
 
 ## Quick Start
@@ -297,15 +306,15 @@ FastAPI (async) with SQLAlchemy, Alembic, Celery, and deep module seams.
 | `document_extraction.py` | PDF/text/markdown text extraction |
 | `chunking.py` | Deterministic character-based chunking |
 | `embeddings.py` | OpenAI-compatible embedding provider seam |
-| `vector_store.py` | Qdrant CRUD operations |
 | `lexical_retriever.py` | Postgres BM25 full-text search |
 | `semantic_chunk_search.py` | Qdrant semantic similarity search |
 | `hybrid_retrieval.py` | RRF fusion of BM25 + semantic results |
 | `context_packer.py` | Token/char budget packing |
 | `prompt_builder.py` | Grounded document assistant prompt with multi-turn history chaining |
 | `llm_provider.py` | OpenAI-compatible LLM streaming seam |
-| `answer_pipeline.py` | Full RAG orchestration (cache → retrieve → pack → prompt → stream → persist) |
-| `semantic_cache.py` | Redis RediSearch HNSW vector cache |
+| `answer_pipeline.py` | Full RAG orchestration (cache → hydrate → retrieve → pack → prompt → stream → persist) |
+| `semantic_cache.py` | Redis RediSearch HNSW vector cache; stores chunk IDs only (Two-Pass Hydration) |
+| `vector_store.py` | Qdrant CRUD + `retrieve_by_ids()` for cache hydration |
 | `citation_mapper.py` | Label → chunk metadata mapping |
 | `conversation.py` | Message/citation persistence |
 | `conversation_scope.py` | Active document management per conversation |
@@ -426,5 +435,6 @@ QA_RAG/
 - **Streaming persistence** — user message persisted before stream starts; assistant message + citations persisted after stream completes. Crash caveat: dangling user message detected on next load with retry prompt.
 - **Multi-turn chaining** — each LLM call receives the full conversation history (user questions + context chunks + assistant answers) with the system prompt at the top. Prior turns' citations are reconstructed from stored citation rows.
 - **Active document scope** — multi-select dialog controls which documents participate in RAG. Selection is persisted per-conversation via `PUT /conversations/{id}/active-documents` and passed when creating new conversations.
+- **Two-Pass Hydration** — semantic cache stores only chunk IDs (not full citation objects). On every cache hit, citations are hydrated live from Qdrant (chunk existence) + Postgres (filenames, pages, ACLs). Deleted documents are silently skipped; hydration failures fall back to full RAG. This guarantees citation freshness without sacrificing cache speed.
 - **Deterministic test doubles** — fake embeddings, fake vector stores, fake LLMs return predictable outputs for reliable CI.
 - **`.env` is source of truth** — Docker Compose reads from `.env` and passes to containers. No hardcoded keys in compose files.
