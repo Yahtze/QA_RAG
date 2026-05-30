@@ -32,6 +32,7 @@ from app.services.lexical_retriever import LexicalRetriever
 from app.services.llm_provider import OpenAICompatibleLLMProvider
 from app.services.semantic_cache import RedisSemanticCache
 from app.services.semantic_chunk_search import QdrantSemanticChunkSearch
+from app.services.vector_store import QdrantVectorStore
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -46,12 +47,14 @@ def build_answer_pipeline(session: AsyncSession, settings: Settings) -> AnswerPi
     retriever = HybridRetriever(session, lexical=lexical, semantic=semantic)
     llm = OpenAICompatibleLLMProvider(settings)
     semantic_cache = RedisSemanticCache(settings, embeddings)
+    vector_store = QdrantVectorStore(settings)
     return AnswerPipeline(
         session,
         settings=settings,
         retriever=retriever,
         llm=llm,
         semantic_cache=semantic_cache,
+        vector_store=vector_store,
     )
 
 

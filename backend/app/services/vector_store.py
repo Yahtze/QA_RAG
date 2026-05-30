@@ -1,4 +1,4 @@
-"""Vector store module. This is the only module that knows Qdrant point/payload request shapes."""
+"""Vector store module. Only module that knows Qdrant point/payload request shapes."""
 
 from typing import Protocol
 from uuid import UUID
@@ -18,6 +18,12 @@ from app.services.ingestion_errors import (
 )
 
 DocumentChunkForVector = ChunkRecord
+
+
+class ChunkHydrationError(Exception):
+    """Raised when chunk hydration from Qdrant fails."""
+
+    pass
 
 
 def build_payload(*, user_id: UUID, chunk: DocumentChunkForVector) -> dict:
@@ -147,3 +153,51 @@ class QdrantVectorStore:
             raise
         except (ResponseHandlingException, UnexpectedResponse) as exc:
             raise _classify_qdrant_error(exc) from exc
+
+    @retry(
+        retry=retry_if_exception(_retryable_qdrant),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        reraise=True,
+    )
+    async def _retrieve_by_ids_raw(self, ids: list[str]) -> list[qm.Record]:
+        """Retrieve points by their IDs from Qdrant (raw, with retry)."""
+        if not ids:
+            return []
+        return await self.client.retrieve(
+            collection_name=self.settings.QDRANT_COLLECTION_NAME,
+            ids=ids,
+            with_payload=True,
+            with_vectors=False,
+        )
+
+    async def retrieve_by_ids(self, ids: list[str]) -> list[dict]:
+        """Retrieve chunk payloads by their IDs from Qdrant.
+
+        Used for Two-Pass Hydration: on a semantic cache hit, fetch fresh
+        metadata for the cached chunk IDs instead of returning stale citations.
+
+        Args:
+            ids: Chunk IDs (UUID strings matching the format used during upsert).
+
+        Returns:
+            List of payload dicts. Each contains document_id, page, text, source,
+            chunk_index, user_id, etc. Points that no longer exist in Qdrant
+            (deleted documents) are silently omitted.
+
+        Raises:
+            ChunkHydrationError: If the Qdrant lookup fails entirely.
+        """
+        try:
+            records = await self._retrieve_by_ids_raw(ids)
+            return [record.payload for record in records]
+        except (RetryableIngestionError, DeterministicIngestionError):
+            raise
+        except (ResponseHandlingException, UnexpectedResponse) as exc:
+            raise ChunkHydrationError(
+                f"Failed to retrieve chunks by IDs: {exc}"
+            ) from exc
+        except Exception as exc:
+            raise ChunkHydrationError(
+                f"Failed to retrieve chunks by IDs: {exc}"
+            ) from exc
