@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { ChatThread } from '@/components/chat/ChatThread'
 import { CitationPanel } from '@/components/chat/CitationPanel'
@@ -9,14 +10,28 @@ import { Separator } from '@/components/ui/separator'
 import { ConversationProvider, useConversation } from '@/store/ConversationContext'
 import { DocumentPipelineProvider, useDocumentPipeline } from '@/store/DocumentPipelineContext'
 import { ActiveConversationScopeProvider } from '@/store/ActiveConversationScopeContext'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 
 function ChatBody() {
   const { documents } = useDocumentPipeline()
   const { conversationId } = useConversation()
+  const [documentsOpen, setDocumentsOpen] = useState(false)
 
   return (
     <AppShell
-      left={<><UploadPanel /><div><h2 className="mb-3 font-semibold">Documents</h2><DocumentList /></div></>}
+      left={<>
+        <UploadPanel />
+        <div>
+          <button
+            onClick={() => setDocumentsOpen(!documentsOpen)}
+            className="flex w-full items-center gap-1.5 mb-3 font-semibold text-left"
+          >
+            {documentsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            Documents
+          </button>
+          {documentsOpen && <DocumentList />}
+        </div>
+      </>}
       center={
         <div className="space-y-4">
           <ManageActiveDocumentsDialog documents={documents} conversationId={conversationId} />
