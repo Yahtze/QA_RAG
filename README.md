@@ -63,6 +63,56 @@ A full-stack RAG (Retrieval-Augmented Generation) application. Upload documents,
 | **Semantic Cache** | Redis vector index cache; bypasses retrieval + LLM on high-similarity hit |
 | **Reconciliation** | Detects stale/missing ingestion states; plans and applies recovery actions |
 
+### Ingestion Pipeline
+
+```
+PDF Parser
+    │
+    ▼
+Chunker
+    │
+    ▼
+Embedder
+    │
+    ▼
+Metadata Extractor
+    │
+    ▼
+Store Chunks (Postgres)
+    │
+    ▼
+Store Vectors (Qdrant)
+```
+
+### Answer Pipeline
+
+```
+Semantic Cache (Redis)
+    │
+    ├─ hit → return cached answer
+    │
+    ▼ miss
+BM25 (Postgres full-text)
+    │
+    ▼
+Semantic (Qdrant vectors)
+    │
+    ▼
+RRF Fusion
+    │
+    ▼
+Context Builder
+    │
+    ▼
+LLM Stream
+    │
+    ▼
+Citation Mapper
+    │
+    ▼
+Persist & Stream to Client
+```
+
 ## Quick Start
 
 ### Full Stack (Docker)
