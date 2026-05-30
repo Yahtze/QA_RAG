@@ -24,8 +24,7 @@ export default function Login() {
     <main className="flex min-h-screen items-center justify-center bg-background p-6">
       <Card className="w-full max-w-md border-border/80 bg-card/80 shadow-2xl shadow-cyan-950/30">
         <CardHeader>
-          <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <CardDescription>Sign in with the fake reviewer account to open the QA RAG workspace.</CardDescription>
+          <CardTitle className="text-2xl">Welcome Back</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
@@ -37,9 +36,9 @@ export default function Login() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
             </div>
-            <Button className="w-full" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in'}</Button>
+            <Button className="w-full" disabled={isSubmitting}>{isSubmitting ? 'Signing In…' : 'Sign In'}</Button>
           </form>
-          <p className="mt-4 text-sm text-muted-foreground">Need an account? <Link className="text-primary" to="/register">Register</Link></p>
+          <p className="mt-4 text-sm text-muted-foreground">Need an Account? <Link className="text-primary" to="/register">Register</Link></p>
         </CardContent>
       </Card>
     </main>

@@ -13,12 +13,35 @@ interface DocumentPipelineValue {
 }
 
 const POLL_INTERVAL_MS = 2000
+const ACTIVE_DOCUMENT_STORAGE_KEY = 'qa-rag:active-document-id'
+
+function readStoredActiveDocumentId(): string | null {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return null
+    return window.localStorage.getItem(ACTIVE_DOCUMENT_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeStoredActiveDocumentId(value: string | null): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    if (value) {
+      window.localStorage.setItem(ACTIVE_DOCUMENT_STORAGE_KEY, value)
+    } else {
+      window.localStorage.removeItem(ACTIVE_DOCUMENT_STORAGE_KEY)
+    }
+  } catch {
+    // no-op
+  }
+}
 
 const DocumentPipelineContext = createContext<DocumentPipelineValue | null>(null)
 
 export function DocumentPipelineProvider({ children }: { children: ReactNode }) {
   const [documents, setDocuments] = useState<RagDocument[]>([])
-  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null)
+  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(readStoredActiveDocumentId)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const stopPolling = useCallback(() => {
@@ -31,12 +54,17 @@ export function DocumentPipelineProvider({ children }: { children: ReactNode }) 
   const refreshDocs = useCallback(() => {
     listDocuments().then((docs) => {
       setDocuments(docs)
+      const hasActive = activeDocumentId && docs.some((d) => d.id === activeDocumentId && d.status === 'ready')
+      if (!hasActive) {
+        const firstReady = docs.find((d) => d.status === 'ready')
+        setActiveDocumentId(firstReady?.id ?? null)
+      }
       const nonReady = docs.filter((d) => d.status !== 'ready' && d.status !== 'failed')
       if (nonReady.length === 0) stopPolling()
     }).catch(() => {
       // fail silently
     })
-  }, [stopPolling])
+  }, [activeDocumentId, stopPolling])
 
   const startPolling = useCallback(() => {
     stopPolling()
@@ -86,6 +114,10 @@ export function DocumentPipelineProvider({ children }: { children: ReactNode }) 
     const selected = documents.find((doc) => doc.id === documentId)
     if (selected?.status === 'ready') setActiveDocumentId(documentId)
   }
+
+  useEffect(() => {
+    writeStoredActiveDocumentId(activeDocumentId)
+  }, [activeDocumentId])
 
   const activeDocument = documents.find((doc) => doc.id === activeDocumentId && doc.status === 'ready') ?? null
 

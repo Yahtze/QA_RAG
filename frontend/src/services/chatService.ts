@@ -1,5 +1,5 @@
 import { apiRequest } from './apiClient'
-import type { ChatResponse, Citation, ConversationSummary, RagDocument } from '@/types'
+import type { ChatResponse, Citation, ConversationSummary, Message, RagDocument } from '@/types'
 
 interface ConversationOut {
   id: string
@@ -35,12 +35,21 @@ interface MessagePairOut {
   assistant_message: MessageOut
 }
 
-export async function createConversation(documentId: string): Promise<string> {
+interface CursorPage<T> {
+  items: T[]
+  page_info: { next_cursor: string | null; has_more: boolean }
+}
+
+export async function createConversation(
+  documentId: string,
+  activeDocumentIds?: string[],
+): Promise<string> {
+  const ids = activeDocumentIds && activeDocumentIds.length > 0 ? activeDocumentIds : [documentId]
   const response = await apiRequest<ConversationOut>('/conversations', {
     method: 'POST',
     body: JSON.stringify({
       document_id: documentId,
-      active_document_ids: [documentId],
+      active_document_ids: ids,
     }),
   })
   return response.id
@@ -81,6 +90,31 @@ export async function askQuestion(
     answer: pair.assistant_message.content,
     citations: pair.assistant_message.citations.map(mapCitation(document)),
   }
+}
+
+export async function listConversations(limit = 100): Promise<ConversationOut[]> {
+  const page = await apiRequest<CursorPage<ConversationOut>>(`/conversations?limit=${limit}`)
+  return page.items ?? []
+}
+
+export async function listMessages(conversationId: string, limit = 200): Promise<Message[]> {
+  const page = await apiRequest<CursorPage<MessageOut>>(`/conversations/${conversationId}/messages?limit=${limit}`)
+  return (page.items ?? []).map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    status: 'sent',
+    createdAt: new Date(message.created_at).toLocaleString(),
+    citations: message.citations.map((citation) => ({
+      id: citation.id,
+      label: citation.label ?? undefined,
+      chunkId: citation.chunk_id ?? undefined,
+      documentId: citation.document_id,
+      documentName: citation.filename ?? 'Document',
+      page: citation.page_number ?? 1,
+      snippet: citation.snippet ?? citation.chunk_text,
+    })),
+  }))
 }
 
 function mapCitation(document: RagDocument): (c: CitationOut) => Citation {

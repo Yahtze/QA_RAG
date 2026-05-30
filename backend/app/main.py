@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -21,6 +22,21 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings_dep()
+    app_logger = logging.getLogger("app")
+    app_logger.setLevel(settings.app_log_level_normalized)
+
+    uvicorn_error_logger = logging.getLogger("uvicorn.error")
+    if not app_logger.handlers:
+        if uvicorn_error_logger.handlers:
+            app_logger.handlers = uvicorn_error_logger.handlers
+        else:
+            handler = logging.StreamHandler()
+            handler.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+            )
+            app_logger.addHandler(handler)
+        app_logger.propagate = False
+
     app = FastAPI(title="QA RAG Backend", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,

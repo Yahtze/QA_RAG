@@ -3,21 +3,18 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { cn } from '@/lib/utils'
 import type { RagDocument } from '@/types'
 
 interface DocumentCardProps {
   document: RagDocument
-  isActive: boolean
-  onSelect: () => void
   onRetry: () => void
   onDelete: () => void
 }
 
-export function DocumentCard({ document, isActive, onSelect, onRetry, onDelete }: DocumentCardProps) {
+export function DocumentCard({ document, onRetry, onDelete }: DocumentCardProps) {
   const icon = document.status === 'ready' ? <CheckCircle2 className="size-4 text-emerald-400" /> : document.status === 'failed' ? <AlertCircle className="size-4 text-destructive" /> : document.status === 'uploading' ? <UploadCloud className="size-4 text-primary" /> : <Clock3 className="size-4 text-accent" />
   return (
-    <Card className={cn('cursor-pointer border-border/70 bg-card/70 transition hover:border-primary/60', isActive && 'border-primary/80 shadow-lg shadow-cyan-950/30')} onClick={document.status === 'ready' ? onSelect : undefined}>
+    <Card className="border-border/70 bg-card/70 transition hover:border-primary/60">
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0"><p className="truncate font-medium">{document.name}</p><p className="text-xs text-muted-foreground">{document.type} · {document.sizeLabel} · {document.uploadedAt}</p></div>

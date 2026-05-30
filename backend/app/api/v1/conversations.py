@@ -30,6 +30,7 @@ from app.services.embeddings import OpenAIEmbeddingProvider
 from app.services.hybrid_retrieval import HybridRetriever
 from app.services.lexical_retriever import LexicalRetriever
 from app.services.llm_provider import OpenAICompatibleLLMProvider
+from app.services.semantic_cache import RedisSemanticCache
 from app.services.semantic_chunk_search import QdrantSemanticChunkSearch
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -37,13 +38,21 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 def build_answer_pipeline(session: AsyncSession, settings: Settings) -> AnswerPipeline:
     lexical = LexicalRetriever(session)
+    embeddings = OpenAIEmbeddingProvider(settings)
     semantic = QdrantSemanticChunkSearch(
         settings=settings,
-        embeddings=OpenAIEmbeddingProvider(settings),
+        embeddings=embeddings,
     )
     retriever = HybridRetriever(session, lexical=lexical, semantic=semantic)
     llm = OpenAICompatibleLLMProvider(settings)
-    return AnswerPipeline(session, settings=settings, retriever=retriever, llm=llm)
+    semantic_cache = RedisSemanticCache(settings, embeddings)
+    return AnswerPipeline(
+        session,
+        settings=settings,
+        retriever=retriever,
+        llm=llm,
+        semantic_cache=semantic_cache,
+    )
 
 
 def event_payload(event: AnswerEvent) -> dict:

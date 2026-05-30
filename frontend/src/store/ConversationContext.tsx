@@ -1,10 +1,11 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
-import { createConversation as createConv } from '@/services/chatService'
+import { createConversation as createConv, listConversations, listMessages, updateActiveDocuments } from '@/services/chatService'
 import { streamConversationMessage } from '@/services/conversationStream'
 import type { Citation, Message } from '@/types'
 
 import { useDocumentPipeline } from './DocumentPipelineContext'
+import { useActiveConversationScope } from './ActiveConversationScopeContext'
 
 interface ConversationValue {
   conversationId: string | null
@@ -15,6 +16,8 @@ interface ConversationValue {
   send: (query: string) => Promise<void>
   retry: (messageId: string) => Promise<void>
   activateCitationByLabel: (label: string) => void
+  newChat: () => void
+  updateActiveDocumentIds: (ids: string[]) => Promise<void>
 }
 
 function extractCitationLabels(content: string): Set<string> {
@@ -27,11 +30,29 @@ function extractCitationLabels(content: string): Set<string> {
   return labels
 }
 
+const CONV_SESSION_KEY = 'qa-rag:active-conversation-id'
+
+function readSessionConversationId(): string | null {
+  try {
+    return sessionStorage.getItem(CONV_SESSION_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeSessionConversationId(id: string | null): void {
+  try {
+    if (id) sessionStorage.setItem(CONV_SESSION_KEY, id)
+    else sessionStorage.removeItem(CONV_SESSION_KEY)
+  } catch {
+    // no-op
+  }
+}
+
 const ConversationContext = createContext<ConversationValue | null>(null)
 
-export function ConversationProvider({ children }: { children: ReactNode }) {
-  const { activeDocument } = useDocumentPipeline()
-  const [messages, setMessages] = useState<Message[]>([
+function initialMessages(): Message[] {
+  return [
     {
       id: 'assistant-welcome',
       role: 'assistant',
@@ -39,25 +60,34 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       status: 'sent',
       createdAt: 'Just now',
     },
-  ])
+  ]
+}
+
+export function ConversationProvider({ children }: { children: ReactNode }) {
+  const { activeDocument, documents: pipelineDocuments } = useDocumentPipeline()
+  const scope = useActiveConversationScope()
+  const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [latestCitations, setLatestCitations] = useState<Citation[]>([])
   const [activeCitationId, setActiveCitationId] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversationDocumentId, setConversationDocumentId] = useState<string | null>(null)
+  const [isHydrating, setIsHydrating] = useState(false)
 
   async function ensureConversation(documentId: string): Promise<string> {
     if (conversationId && conversationDocumentId === documentId) {
       return conversationId
     }
-    const id = await createConv(documentId)
+    const id = await createConv(documentId, scope.activeDocumentIds)
     setConversationId(id)
     setConversationDocumentId(documentId)
+    writeSessionConversationId(id)
     return id
   }
 
   async function send(query: string) {
-    if (!activeDocument || !query.trim()) return
+    const primaryDocument = scope.activeDocuments[0] ?? activeDocument
+    if (!primaryDocument || !query.trim() || isHydrating) return
     const originalQuery = query.trim()
     const loadingId = `assistant-${Date.now()}`
     setIsSending(true)
@@ -80,7 +110,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     ])
 
     try {
-      const conversationId = await ensureConversation(activeDocument.id)
+      const conversationId = await ensureConversation(primaryDocument.id)
       for await (const event of streamConversationMessage(conversationId, originalQuery)) {
         if (event.type === 'token') {
           setMessages((current) =>
@@ -186,18 +216,92 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     if (match) setActiveCitationId(match.id)
   }
 
+  useEffect(() => {
+    if (!activeDocument) return
+    const activeDocumentId = activeDocument.id
+    let cancelled = false
+
+    async function hydrateConversation() {
+      const persistedId = readSessionConversationId()
+      if (!persistedId) {
+        if (!cancelled) {
+          setConversationId(null)
+          setConversationDocumentId(null)
+          setMessages(initialMessages())
+          setLatestCitations([])
+          setActiveCitationId(null)
+        }
+        return
+      }
+
+      setIsHydrating(true)
+      try {
+        const conversations = await listConversations()
+        const match = conversations.find((conv) => conv.id === persistedId)
+
+        if (!match) {
+          writeSessionConversationId(null)
+          if (!cancelled) {
+            setConversationId(null)
+            setConversationDocumentId(null)
+            setMessages(initialMessages())
+            setLatestCitations([])
+            setActiveCitationId(null)
+          }
+          return
+        }
+
+        const history = await listMessages(match.id)
+        if (!cancelled) {
+          setConversationId(match.id)
+          setConversationDocumentId(match.document_id ?? activeDocumentId)
+          setMessages(history.length > 0 ? history : initialMessages())
+          const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant')
+          setLatestCitations(lastAssistant?.citations ?? [])
+          setActiveCitationId(lastAssistant?.citations?.[0]?.id ?? null)
+        }
+      } catch {
+        writeSessionConversationId(null)
+        // fail silently
+      } finally {
+        if (!cancelled) setIsHydrating(false)
+      }
+    }
+
+    void hydrateConversation()
+    return () => {
+      cancelled = true
+    }
+  }, [activeDocument?.id])
+
+  function newChat() {
+    setConversationId(null)
+    setConversationDocumentId(null)
+    setMessages(initialMessages())
+    setLatestCitations([])
+    setActiveCitationId(null)
+    writeSessionConversationId(null)
+  }
+
+  async function updateActiveDocumentIds(ids: string[]) {
+    if (!conversationId) return
+    await updateActiveDocuments(conversationId, ids)
+  }
+
   const value = useMemo(
     () => ({
       conversationId,
       messages,
       latestCitations,
       activeCitationId,
-      isSending,
+      isSending: isSending || isHydrating,
       send,
       retry,
       activateCitationByLabel,
+      newChat,
+      updateActiveDocumentIds,
     }),
-    [conversationId, messages, latestCitations, activeCitationId, isSending, activeDocument],
+    [conversationId, messages, latestCitations, activeCitationId, isSending, isHydrating, activeDocument, scope.activeDocumentIds],
   )
 
   return (

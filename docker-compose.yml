@@ -20,7 +20,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack-server:7.2.0-v18
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -44,7 +44,7 @@ services:
       ENVIRONMENT: local
       DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
       ALEMBIC_DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
-      JWT_SECRET_KEY: dev-secret-change-me
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
     depends_on:
@@ -63,7 +63,7 @@ services:
       ENVIRONMENT: local
       DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
       ALEMBIC_DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
-      JWT_SECRET_KEY: dev-secret-change-me
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION_NAME: documents
@@ -80,6 +80,12 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-${OPENAI_API_KEY}}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      SEMANTIC_CACHE_ENABLED: ${SEMANTIC_CACHE_ENABLED:-false}
+      SEMANTIC_CACHE_TTL_SECONDS: ${SEMANTIC_CACHE_TTL_SECONDS:-86400}
+      SEMANTIC_CACHE_MIN_SIMILARITY: ${SEMANTIC_CACHE_MIN_SIMILARITY:-0.85}
+      SEMANTIC_CACHE_TIMEOUT_MS: ${SEMANTIC_CACHE_TIMEOUT_MS:-75}
+      SEMANTIC_CACHE_INDEX_NAME: ${SEMANTIC_CACHE_INDEX_NAME:-idx:semcache}
+      SEMANTIC_CACHE_KEY_PREFIX: ${SEMANTIC_CACHE_KEY_PREFIX:-semcache:}
       STORAGE_ROOT: ${STORAGE_ROOT:-/app/backend/storage}
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
     depends_on:
@@ -103,7 +109,7 @@ services:
       ENVIRONMENT: local
       DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
       ALEMBIC_DATABASE_URL: postgresql+asyncpg://qa_rag:qa_rag@postgres:5432/qa_rag
-      JWT_SECRET_KEY: dev-secret-change-me
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       BACKEND_CORS_ORIGINS: http://localhost:5173,http://localhost:8080
       REDIS_URL: redis://redis:6379/0
@@ -116,6 +122,12 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-${OPENAI_API_KEY}}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      SEMANTIC_CACHE_ENABLED: ${SEMANTIC_CACHE_ENABLED:-false}
+      SEMANTIC_CACHE_TTL_SECONDS: ${SEMANTIC_CACHE_TTL_SECONDS:-86400}
+      SEMANTIC_CACHE_MIN_SIMILARITY: ${SEMANTIC_CACHE_MIN_SIMILARITY:-0.85}
+      SEMANTIC_CACHE_TIMEOUT_MS: ${SEMANTIC_CACHE_TIMEOUT_MS:-75}
+      SEMANTIC_CACHE_INDEX_NAME: ${SEMANTIC_CACHE_INDEX_NAME:-idx:semcache}
+      SEMANTIC_CACHE_KEY_PREFIX: ${SEMANTIC_CACHE_KEY_PREFIX:-semcache:}
       STORAGE_ROOT: ${STORAGE_ROOT:-/app/backend/storage}
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
     depends_on:

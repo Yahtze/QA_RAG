@@ -1,3 +1,4 @@
+import asyncio
 from uuid import uuid4
 
 import pytest
@@ -14,6 +15,7 @@ from app.models import (
     User,
 )
 from app.services.answer_pipeline import AnswerPipeline
+from app.services.semantic_cache import SemanticCacheHit
 from app.services.retrieval_types import (
     NoContextReason,
     RetrievalResult,
@@ -41,6 +43,20 @@ class FakeLLM:
             raise self.exc
         for token in self.tokens:
             yield token
+
+
+class FakeSemanticCache:
+    def __init__(self, hit=None):
+        self.hit = hit
+        self.get_called = False
+        self.set_called = False
+
+    async def get(self, *, query: str, document_ids=None):
+        self.get_called = True
+        return self.hit
+
+    async def set(self, *, query: str, answer: str, citations: dict, document_ids=None):
+        self.set_called = True
 
 
 async def fixture(db_session):
@@ -179,3 +195,64 @@ async def test_handled_llm_failure_persists_failed_assistant(db_session, setting
     assert failed.retryable is True
     assert failed.original_query == "Refunds?"
     assert failed.error_message == "boom"
+
+
+@pytest.mark.asyncio
+async def test_semantic_cache_hit_skips_retriever_and_llm(db_session, settings):
+    user, doc, chunk, conv = await fixture(db_session)
+    settings.SEMANTIC_CACHE_ENABLED = True
+    cache = FakeSemanticCache(
+        SemanticCacheHit(
+            answer="Cached answer",
+            citations={"1": {"filename": "guide.pdf"}},
+        )
+    )
+    llm = FakeLLM(["unused"])
+    pipeline = AnswerPipeline(
+        db_session,
+        settings=settings,
+        retriever=FakeRetriever(RetrievalResult([], None)),
+        llm=llm,
+        semantic_cache=cache,
+    )
+
+    events = [
+        event
+        async for event in pipeline.answer(
+            user=user, conversation_id=conv.id, content="Refunds?"
+        )
+    ]
+
+    assert cache.get_called is True
+    assert llm.called is False
+    assert [event.type for event in events] == ["token", "citations", "done"]
+    assert events[0].value == "Cached answer"
+
+
+@pytest.mark.asyncio
+async def test_semantic_cache_miss_writes_async(db_session, settings):
+    user, doc, chunk, conv = await fixture(db_session)
+    settings.SEMANTIC_CACHE_ENABLED = True
+    cache = FakeSemanticCache(hit=None)
+    result = RetrievalResult(
+        [RetrievedChunk(chunk.id, doc.id, "guide.pdf", 2, chunk.text, 1, None, 1, 0.5)],
+        None,
+    )
+    pipeline = AnswerPipeline(
+        db_session,
+        settings=settings,
+        retriever=FakeRetriever(result),
+        llm=FakeLLM(["Answer"]),
+        semantic_cache=cache,
+    )
+
+    [
+        event
+        async for event in pipeline.answer(
+            user=user, conversation_id=conv.id, content="Refunds?"
+        )
+    ]
+    await asyncio.sleep(0)
+
+    assert cache.get_called is True
+    assert cache.set_called is True
